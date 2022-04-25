@@ -1,0 +1,180 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.8.0
+  creationTimestamp: null
+  name: clusteroverridepolicies.policy.kcloudlabs.io
+spec:
+  group: policy.kcloudlabs.io
+  names:
+    kind: ClusterOverridePolicy
+    listKind: ClusterOverridePolicyList
+    plural: clusteroverridepolicies
+    shortNames:
+    - cop
+    singular: clusteroverridepolicy
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ClusterOverridePolicy represents the cluster-wide policy that
+          overrides a group of resources.
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec represents the desired behavior of ClusterOverridePolicy.
+            properties:
+              overrideRules:
+                description: OverrideRules defines a collection of override rules
+                  on target operations.
+                items:
+                  description: RuleWithOperation defines the override rules on operations.
+                  properties:
+                    overriders:
+                      description: Overriders represents the override rules that would
+                        apply on resources
+                      properties:
+                        cue:
+                          description: Cue represents override rules defined with
+                            cue code.
+                          type: string
+                        plaintext:
+                          description: Plaintext represents override rules defined
+                            with plaintext overriders.
+                          items:
+                            description: PlaintextOverrider is a simple overrider
+                              that overrides target fields according to path, operator
+                              and value.
+                            properties:
+                              operator:
+                                description: 'Operator indicates the operation on
+                                  target field. Available operators are: add, update
+                                  and remove.'
+                                enum:
+                                - add
+                                - remove
+                                - replace
+                                type: string
+                              path:
+                                description: Path indicates the path of target field
+                                type: string
+                              value:
+                                description: Value to be applied to target field.
+                                  Must be empty when operator is Remove.
+                                x-kubernetes-preserve-unknown-fields: true
+                            required:
+                            - operator
+                            - path
+                            type: object
+                          type: array
+                      type: object
+                    targetOperations:
+                      description: TargetOperations defines restrictions on this override
+                        policy that only applies to resources propagated to the matching
+                        operations. nil means matching all mutate operations.
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - overriders
+                  type: object
+                type: array
+              resourceSelectors:
+                description: ResourceSelectors restricts resource types that this
+                  override policy applies to. nil means matching all resources.
+                items:
+                  description: ResourceSelector the resources will be selected.
+                  properties:
+                    apiVersion:
+                      description: APIVersion represents the API version of the target
+                        resources.
+                      type: string
+                    kind:
+                      description: Kind represents the Kind of the target resources.
+                      type: string
+                    labelSelector:
+                      description: A label query over a set of resources. If name
+                        is not empty, labelSelector will be ignored.
+                      properties:
+                        matchExpressions:
+                          description: matchExpressions is a list of label selector
+                            requirements. The requirements are ANDed.
+                          items:
+                            description: A label selector requirement is a selector
+                              that contains values, a key, and an operator that relates
+                              the key and values.
+                            properties:
+                              key:
+                                description: key is the label key that the selector
+                                  applies to.
+                                type: string
+                              operator:
+                                description: operator represents a key's relationship
+                                  to a set of values. Valid operators are In, NotIn,
+                                  Exists and DoesNotExist.
+                                type: string
+                              values:
+                                description: values is an array of string values.
+                                  If the operator is In or NotIn, the values array
+                                  must be non-empty. If the operator is Exists or
+                                  DoesNotExist, the values array must be empty. This
+                                  array is replaced during a strategic merge patch.
+                                items:
+                                  type: string
+                                type: array
+                            required:
+                            - key
+                            - operator
+                            type: object
+                          type: array
+                        matchLabels:
+                          additionalProperties:
+                            type: string
+                          description: matchLabels is a map of {key,value} pairs.
+                            A single {key,value} in the matchLabels map is equivalent
+                            to an element of matchExpressions, whose key field is
+                            "key", the operator is "In", and the values array contains
+                            only "value". The requirements are ANDed.
+                          type: object
+                      type: object
+                    name:
+                      description: Name of the target resource. Default is empty,
+                        which means selecting all resources.
+                      type: string
+                    namespace:
+                      description: Namespace of the target resource. Default is empty,
+                        which means inherit from the parent object scope.
+                      type: string
+                  required:
+                  - apiVersion
+                  - kind
+                  type: object
+                type: array
+            required:
+            - overrideRules
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
