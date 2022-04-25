@@ -85,5 +85,8 @@ jobs:
       #        run: make test
       - name: Run coverage
         run: ./script/test.sh
-      - name: Upload coverage to Codecov
-        run: bash <(curl -s https://codecov.io/bash)
+      #- name: Upload coverage to Codecov
+      #  run: bash <(curl -s https://codecov.io/bash)
+      - name: Codecov
+        uses: codecov/codecov-action@v3.1.0
+
