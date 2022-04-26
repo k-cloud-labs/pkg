@@ -2,14 +2,15 @@
 // Source: client/listers/policy/v1alpha1/clusteroverridepolicy.go
 
 // Package overridemanager is a generated GoMock package.
-package overridemanager
+package mock
 
 import (
-	reflect "reflect"
+	"reflect"
 
-	gomock "github.com/golang/mock/gomock"
-	v1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
-	labels "k8s.io/apimachinery/pkg/labels"
+	"github.com/golang/mock/gomock"
+	"k8s.io/apimachinery/pkg/labels"
+
+	"github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 )
 
 // MockClusterOverridePolicyLister is a mock of ClusterOverridePolicyLister interface.

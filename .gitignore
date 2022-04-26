@@ -16,3 +16,6 @@ vendor/
 
 # IDE
 .idea/
+
+# bin
+bin/
