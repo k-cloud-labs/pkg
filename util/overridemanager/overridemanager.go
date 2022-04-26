@@ -2,6 +2,7 @@ package overridemanager
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 
 	jsonpatch "github.com/evanphx/json-patch"
@@ -69,7 +70,7 @@ func (o *overrideManagerImpl) ApplyOverridePolicies(rawObj *unstructured.Unstruc
 
 	appliedCOPs, err = o.applyClusterOverridePolicies(rawObj, operation)
 	if err != nil {
-		klog.Errorf("Failed to apply cluster override policies. error: %v", err)
+		klog.ErrorS(err, "Failed to apply cluster override policies.")
 		return nil, nil, err
 	}
 
@@ -77,7 +78,7 @@ func (o *overrideManagerImpl) ApplyOverridePolicies(rawObj *unstructured.Unstruc
 		// Apply namespace scoped override policies
 		appliedOPs, err = o.applyOverridePolicies(rawObj, operation)
 		if err != nil {
-			klog.Errorf("Failed to apply namespaced override policies. error: %v", err)
+			klog.ErrorS(err, "Failed to apply override policies.")
 			return nil, nil, err
 		}
 	}
@@ -88,7 +89,7 @@ func (o *overrideManagerImpl) ApplyOverridePolicies(rawObj *unstructured.Unstruc
 func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj *unstructured.Unstructured, operation string) (*AppliedOverrides, error) {
 	cops, err := o.copLister.List(labels.Everything())
 	if err != nil {
-		klog.Errorf("Failed to list cluster override policies, error: %v", err)
+		klog.ErrorS(err, "Failed to list cluster override policies.")
 		return nil, err
 	}
 
@@ -103,17 +104,17 @@ func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj *unstructured.
 
 	matchingPolicyOverriders := o.getOverridersFromOverridePolicies(items, rawObj, operation)
 	if len(matchingPolicyOverriders) == 0 {
-		klog.V(2).Infof("No cluster override policy for resource: %s/%s", rawObj.GetNamespace(), rawObj.GetName())
+		klog.V(2).InfoS("No cluster override policy.", "resource", klog.KObj(rawObj))
 		return nil, nil
 	}
 
 	appliedOverrides := &AppliedOverrides{}
 	for _, p := range matchingPolicyOverriders {
 		if err := applyPolicyOverriders(rawObj, p.overriders); err != nil {
-			klog.Errorf("Failed to apply cluster overriders(%s) for resource(%s/%s), error: %v", p.name, rawObj.GetNamespace(), rawObj.GetName(), err)
+			klog.ErrorS(err, "Failed to apply cluster overriders.", "clusteroverridepolicy", p.name, "resource", klog.KObj(rawObj))
 			return nil, err
 		}
-		klog.V(2).Infof("Applied cluster overriders(%s) for resource(%s/%s)", p.name, rawObj.GetNamespace(), rawObj.GetName())
+		klog.V(2).InfoS("Applied cluster overriders.", "clusteroverridepolicy", p.name, "resource", klog.KObj(rawObj))
 		appliedOverrides.Add(p.name, p.overriders)
 	}
 
@@ -123,7 +124,7 @@ func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj *unstructured.
 func (o *overrideManagerImpl) applyOverridePolicies(rawObj *unstructured.Unstructured, operation string) (*AppliedOverrides, error) {
 	ops, err := o.opLister.List(labels.Everything())
 	if err != nil {
-		klog.Errorf("Failed to list override policies from namespace: %s, error: %v", rawObj.GetNamespace(), err)
+		klog.ErrorS(err, "Failed to list override policies.", "namespace", rawObj.GetNamespace())
 		return nil, err
 	}
 
@@ -138,17 +139,17 @@ func (o *overrideManagerImpl) applyOverridePolicies(rawObj *unstructured.Unstruc
 
 	matchingPolicyOverriders := o.getOverridersFromOverridePolicies(items, rawObj, operation)
 	if len(matchingPolicyOverriders) == 0 {
-		klog.V(2).Infof("No override policy for resource(%s/%s)", rawObj.GetNamespace(), rawObj.GetName())
+		klog.V(2).InfoS("No override policy.", "resource", klog.KObj(rawObj))
 		return nil, nil
 	}
 
 	appliedOverriders := &AppliedOverrides{}
 	for _, p := range matchingPolicyOverriders {
 		if err := applyPolicyOverriders(rawObj, p.overriders); err != nil {
-			klog.Errorf("Failed to apply overriders(%s/%s) for resource(%s/%s), error: %v", p.namespace, p.name, rawObj.GetNamespace(), rawObj.GetName(), err)
+			klog.ErrorS(err, "Failed to apply overriders.", "overridepolicy", fmt.Sprintf("%s/%s", p.namespace, p.name), "resource", klog.KObj(rawObj))
 			return nil, err
 		}
-		klog.V(2).Infof("Applied overriders(%s/%s) for resource(%s/%s)", p.namespace, p.name, rawObj.GetNamespace(), rawObj.GetName())
+		klog.V(2).InfoS("Applied overriders(%s/%s) for resource(%s/%s)", p.namespace, p.name, rawObj.GetNamespace(), rawObj.GetName())
 		appliedOverriders.Add(p.name, p.overriders)
 	}
 
