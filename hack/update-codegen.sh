@@ -6,6 +6,8 @@ set -o pipefail
 
 SCRIPT_ROOT=$(dirname ${BASH_SOURCE})/..
 
+go mod tidy
+go mod vendor
 chmod +x vendor/k8s.io/code-generator/generate-groups.sh
 
 vendor/k8s.io/code-generator/generate-groups.sh all \

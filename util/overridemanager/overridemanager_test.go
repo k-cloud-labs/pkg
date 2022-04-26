@@ -13,6 +13,7 @@ import (
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 	v1alpha10 "github.com/k-cloud-labs/pkg/client/listers/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/test/helper"
+	"github.com/k-cloud-labs/pkg/test/mock"
 	"github.com/k-cloud-labs/pkg/util"
 	utilhelper "github.com/k-cloud-labs/pkg/util/helper"
 )
@@ -257,8 +258,8 @@ func TestOverrideManagerImpl_ApplyOverridePolicies(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	opLister := NewMockOverridePolicyLister(ctrl)
-	copLister := NewMockClusterOverridePolicyLister(ctrl)
+	opLister := mock.NewMockOverridePolicyLister(ctrl)
+	copLister := mock.NewMockClusterOverridePolicyLister(ctrl)
 	m := NewOverrideManager(copLister, opLister)
 
 	opLister.EXPECT().List(labels.Everything()).Return([]*policyv1alpha1.OverridePolicy{
