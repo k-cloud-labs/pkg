@@ -92,10 +92,5 @@ func isNil(i interface{}) bool {
 }
 
 func isSettable(i interface{}) bool {
-	kind := reflect.ValueOf(i).Kind()
-	if kind == reflect.Ptr {
-		return true
-	}
-
-	return false
+	return reflect.ValueOf(i).Kind() == reflect.Ptr
 }

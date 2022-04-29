@@ -199,7 +199,9 @@ func applyPolicyOverriders(rawObj *unstructured.Unstructured, overriders policyv
 		if err != nil {
 			return err
 		}
-		applyJSONPatch(rawObj, *patches)
+		if err := applyJSONPatch(rawObj, *patches); err != nil {
+			return err
+		}
 	}
 
 	return applyJSONPatch(rawObj, parseJSONPatchesByPlaintext(overriders.Plaintext))
