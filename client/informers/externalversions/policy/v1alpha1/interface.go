@@ -25,6 +25,8 @@ import (
 type Interface interface {
 	// ClusterOverridePolicies returns a ClusterOverridePolicyInformer.
 	ClusterOverridePolicies() ClusterOverridePolicyInformer
+	// ClusterValidatePolicies returns a ClusterValidatePolicyInformer.
+	ClusterValidatePolicies() ClusterValidatePolicyInformer
 	// OverridePolicies returns a OverridePolicyInformer.
 	OverridePolicies() OverridePolicyInformer
 }
@@ -43,6 +45,11 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 // ClusterOverridePolicies returns a ClusterOverridePolicyInformer.
 func (v *version) ClusterOverridePolicies() ClusterOverridePolicyInformer {
 	return &clusterOverridePolicyInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// ClusterValidatePolicies returns a ClusterValidatePolicyInformer.
+func (v *version) ClusterValidatePolicies() ClusterValidatePolicyInformer {
+	return &clusterValidatePolicyInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // OverridePolicies returns a OverridePolicyInformer.

@@ -18,6 +18,9 @@ const (
 
 	// Update operation
 	Update = "Update"
+
+	// Delete operation
+	Delete = "Delete"
 )
 
 // Define resource filed
@@ -28,6 +31,10 @@ const (
 
 // Define cue parameter and output name
 const (
-	ParameterName      = "object"
+	// ParameterName is the parameter name defined in cue
+	ParameterName = "object"
+	// OverrideOutputName is the output name defined in cue for override policy
 	OverrideOutputName = "patches"
+	// ValidateOutputName is the output name defined in cue for validate policy
+	ValidateOutputName = "validate"
 )

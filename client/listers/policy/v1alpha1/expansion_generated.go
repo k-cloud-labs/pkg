@@ -21,6 +21,10 @@ package v1alpha1
 // ClusterOverridePolicyLister.
 type ClusterOverridePolicyListerExpansion interface{}
 
+// ClusterValidatePolicyListerExpansion allows custom methods to be added to
+// ClusterValidatePolicyLister.
+type ClusterValidatePolicyListerExpansion interface{}
+
 // OverridePolicyListerExpansion allows custom methods to be added to
 // OverridePolicyLister.
 type OverridePolicyListerExpansion interface{}
