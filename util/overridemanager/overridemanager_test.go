@@ -15,7 +15,7 @@ import (
 	"github.com/k-cloud-labs/pkg/test/helper"
 	"github.com/k-cloud-labs/pkg/test/mock"
 	"github.com/k-cloud-labs/pkg/util"
-	utilhelper "github.com/k-cloud-labs/pkg/util/helper"
+	utilhelper "github.com/k-cloud-labs/pkg/util/converter"
 )
 
 func TestGetMatchingOverridePolicies(t *testing.T) {
@@ -183,11 +183,21 @@ func TestOverrideManagerImpl_ApplyOverridePolicies(t *testing.T) {
 	overriders2 := policyv1alpha1.Overriders{
 		Plaintext: []policyv1alpha1.PlaintextOverrider{
 			{
-				Path:     "/metadata/annotations",
+				Path:     "/metadata/annotations/aaa",
 				Operator: "add",
-				Value:    apiextensionsv1.JSON{Raw: []byte("{\"aaa\": \"bbb\"}")},
+				//Value:    apiextensionsv1.JSON{Raw: []byte("{\"aaa\": \"bbb\"}")},
+				Value: apiextensionsv1.JSON{Raw: []byte("\"bbb\"")},
 			},
 		},
+		Cue: `
+object: _ @tag(object)
+
+patches: [{
+	path: "/metadata/annotations/cue",
+	op: "add",
+	value: "cue",
+}]
+`,
 	}
 	overriders3 := policyv1alpha1.Overriders{
 		Plaintext: []policyv1alpha1.PlaintextOverrider{
@@ -311,6 +321,8 @@ func TestOverrideManagerImpl_ApplyOverridePolicies(t *testing.T) {
 			},
 			wantedAnnotations: map[string]string{
 				"aaa": "bbb",
+				"foo": "bar",
+				"cue": "cue",
 			},
 		},
 	}
@@ -322,5 +334,4 @@ func TestOverrideManagerImpl_ApplyOverridePolicies(t *testing.T) {
 			}
 		})
 	}
-
 }
