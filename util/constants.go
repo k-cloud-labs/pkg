@@ -25,3 +25,9 @@ const (
 	// SpecField indicates the 'spec' field of a resource
 	SpecField = "spec"
 )
+
+// Define cue parameter and output name
+const (
+	ParameterName      = "object"
+	OverrideOutputName = "patches"
+)

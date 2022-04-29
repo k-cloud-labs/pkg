@@ -13,6 +13,7 @@ import (
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/client/listers/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/util"
+	"github.com/k-cloud-labs/pkg/util/cue"
 )
 
 // OverrideManager managers override policies operation
@@ -193,8 +194,14 @@ func (o *overrideManagerImpl) getOverridersFromOverridePolicies(policies []Gener
 
 // applyPolicyOverriders applies OverridePolicy/ClusterOverridePolicy overriders to target object
 func applyPolicyOverriders(rawObj *unstructured.Unstructured, overriders policyv1alpha1.Overriders) error {
-	if err := executeCue(rawObj, overriders.Cue); err != nil {
-		return err
+	if overriders.Cue != "" {
+		patches, err := executeCue(rawObj, overriders.Cue)
+		if err != nil {
+			return err
+		}
+		if err := applyJSONPatch(rawObj, *patches); err != nil {
+			return err
+		}
 	}
 
 	return applyJSONPatch(rawObj, parseJSONPatchesByPlaintext(overriders.Plaintext))
@@ -248,7 +255,11 @@ func operationMatches(operations []string, target string) bool {
 	return false
 }
 
-func executeCue(rawObj *unstructured.Unstructured, cue string) error {
-	// todo: support cue
-	return nil
+func executeCue(rawObj *unstructured.Unstructured, template string) (*[]overrideOption, error) {
+	result := make([]overrideOption, 0)
+	if err := cue.CueDoAndReturn(template, util.ParameterName, rawObj, util.OverrideOutputName, &result); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
 }
