@@ -14,9 +14,10 @@ import (
 	"github.com/k-cloud-labs/pkg/client/listers/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/util"
 	"github.com/k-cloud-labs/pkg/util/cue"
+	"github.com/k-cloud-labs/pkg/util/slice"
 )
 
-// OverrideManager managers override policies operation
+// OverrideManager managers override policies for operation
 type OverrideManager interface {
 	// ApplyOverridePolicies overrides the object if one or more matched override policies exist.
 	// For cluster scoped resource:
@@ -150,7 +151,7 @@ func (o *overrideManagerImpl) applyOverridePolicies(rawObj *unstructured.Unstruc
 			klog.ErrorS(err, "Failed to apply overriders.", "overridepolicy", fmt.Sprintf("%s/%s", p.namespace, p.name), "resource", klog.KObj(rawObj))
 			return nil, err
 		}
-		klog.V(2).InfoS("Applied overriders(%s/%s) for resource(%s/%s)", p.namespace, p.name, rawObj.GetNamespace(), rawObj.GetName())
+		klog.V(2).InfoS("Applied overriders", "overridepolicy", fmt.Sprintf("%s/%s", p.namespace, p.name), "resource", klog.KObj(rawObj))
 		appliedOverriders.Add(p.name, p.overriders)
 	}
 
@@ -175,7 +176,7 @@ func (o *overrideManagerImpl) getOverridersFromOverridePolicies(policies []Gener
 
 	for _, policy := range resourceMatchingPolicies {
 		for _, rule := range policy.GetOverridePolicySpec().OverrideRules {
-			if len(rule.TargetOperations) == 0 || operationMatches(rule.TargetOperations, operation) {
+			if len(rule.TargetOperations) == 0 || slice.Exists(rule.TargetOperations, operation) {
 				matchingPolicyOverriders = append(matchingPolicyOverriders, policyOverriders{
 					name:       policy.GetName(),
 					namespace:  policy.GetNamespace(),
@@ -243,16 +244,6 @@ func parseJSONPatchesByPlaintext(overriders []policyv1alpha1.PlaintextOverrider)
 		})
 	}
 	return patches
-}
-
-func operationMatches(operations []string, target string) bool {
-	for _, op := range operations {
-		if op == target {
-			return true
-		}
-	}
-
-	return false
 }
 
 func executeCue(rawObj *unstructured.Unstructured, template string) (*[]overrideOption, error) {

@@ -54,6 +54,8 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 	// Group=policy, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithResource("clusteroverridepolicies"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Policy().V1alpha1().ClusterOverridePolicies().Informer()}, nil
+	case v1alpha1.SchemeGroupVersion.WithResource("clustervalidatepolicies"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Policy().V1alpha1().ClusterValidatePolicies().Informer()}, nil
 	case v1alpha1.SchemeGroupVersion.WithResource("overridepolicies"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Policy().V1alpha1().OverridePolicies().Informer()}, nil
 

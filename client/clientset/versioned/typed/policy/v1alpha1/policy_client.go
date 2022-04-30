@@ -28,6 +28,7 @@ import (
 type PolicyV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	ClusterOverridePoliciesGetter
+	ClusterValidatePoliciesGetter
 	OverridePoliciesGetter
 }
 
@@ -38,6 +39,10 @@ type PolicyV1alpha1Client struct {
 
 func (c *PolicyV1alpha1Client) ClusterOverridePolicies() ClusterOverridePolicyInterface {
 	return newClusterOverridePolicies(c)
+}
+
+func (c *PolicyV1alpha1Client) ClusterValidatePolicies() ClusterValidatePolicyInterface {
+	return newClusterValidatePolicies(c)
 }
 
 func (c *PolicyV1alpha1Client) OverridePolicies(namespace string) OverridePolicyInterface {

@@ -1,0 +1,30 @@
+domain: kcloudlabs.io
+layout:
+- go.kubebuilder.io/v3
+multigroup: true
+projectName: pkg
+repo: github.com/k-cloud-labs/pkg
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: kcloudlabs.io
+  group: policy
+  kind: OverridePolicy
+  path: github.com/k-cloud-labs/pkg/apis/policy/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+  domain: kcloudlabs.io
+  group: policy
+  kind: ClusterOverridePolicy
+  path: github.com/k-cloud-labs/pkg/apis/policy/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+  domain: kcloudlabs.io
+  group: policy
+  kind: ClusterValidatePolicy
+  path: github.com/k-cloud-labs/pkg/apis/policy/v1alpha1
+  version: v1alpha1
+version: "3"

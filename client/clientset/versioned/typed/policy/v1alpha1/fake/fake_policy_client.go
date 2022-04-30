@@ -31,6 +31,10 @@ func (c *FakePolicyV1alpha1) ClusterOverridePolicies() v1alpha1.ClusterOverrideP
 	return &FakeClusterOverridePolicies{c}
 }
 
+func (c *FakePolicyV1alpha1) ClusterValidatePolicies() v1alpha1.ClusterValidatePolicyInterface {
+	return &FakeClusterValidatePolicies{c}
+}
+
 func (c *FakePolicyV1alpha1) OverridePolicies(namespace string) v1alpha1.OverridePolicyInterface {
 	return &FakeOverridePolicies{c, namespace}
 }

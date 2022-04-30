@@ -19,4 +19,6 @@ package v1alpha1
 
 type ClusterOverridePolicyExpansion interface{}
 
+type ClusterValidatePolicyExpansion interface{}
+
 type OverridePolicyExpansion interface{}
