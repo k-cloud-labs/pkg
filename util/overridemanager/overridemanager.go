@@ -162,7 +162,7 @@ func (o *overrideManagerImpl) getOverridersFromOverridePolicies(policies []Gener
 	resourceMatchingPolicies := make([]GeneralOverridePolicy, 0)
 
 	for _, policy := range policies {
-		if policy.GetOverridePolicySpec().ResourceSelectors == nil {
+		if len(policy.GetOverridePolicySpec().ResourceSelectors) == 0 {
 			resourceMatchingPolicies = append(resourceMatchingPolicies, policy)
 			continue
 		}

@@ -25,9 +25,6 @@ func TestValidateManagerImpl_ApplyValidatePolicies(t *testing.T) {
 			Name: "validatepolicy1",
 		},
 		Spec: policyv1alpha1.ClusterValidatePolicySpec{
-			ResourceSelectors: []policyv1alpha1.ResourceSelector{
-				{},
-			},
 			ValidateRules: []policyv1alpha1.ValidateRuleWithOperation{
 				{
 					TargetOperations: []string{util.Delete},
@@ -35,7 +32,7 @@ func TestValidateManagerImpl_ApplyValidatePolicies(t *testing.T) {
 object: _ @tag(object)
 
 validate: {
-	valid: object.name == "ut-validate-policy-success"
+	valid: object.metadata.name == "ut-validate-policy-success"
 }
 `,
 				}}}}

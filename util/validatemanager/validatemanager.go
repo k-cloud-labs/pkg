@@ -47,7 +47,7 @@ func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstruc
 	}
 
 	for _, cvp := range cvps {
-		if util.ResourceMatchSelectors(rawObj, cvp.Spec.ResourceSelectors...) {
+		if len(cvp.Spec.ResourceSelectors) == 0 || util.ResourceMatchSelectors(rawObj, cvp.Spec.ResourceSelectors...) {
 			for _, rule := range cvp.Spec.ValidateRules {
 				if len(rule.TargetOperations) == 0 || slice.Exists(rule.TargetOperations, operation) {
 					result, err := executeCue(rawObj, rule.Cue)
