@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/k-cloud-labs/pkg/test/helper"
 )
 
@@ -29,7 +31,7 @@ validate:[{
 }]
 `,
 			parameterName: "object",
-			parameter:     helper.NewDeployment("ut-cue-success-with-parameter", "default"),
+			parameter:     helper.NewDeployment(metav1.NamespaceDefault, "ut-cue-success-with-parameter"),
 			outputName:    "validate",
 			output: &[]struct {
 				Msg   string `json:"msg"`
@@ -81,23 +83,22 @@ validate:{
 }
 `,
 			parameterName: "object",
-			parameter:     helper.NewDeployment("ut-cue-failed-output-type", "default"),
+			parameter:     helper.NewDeployment(metav1.NamespaceDefault, "ut-cue-failed-output-type"),
 			outputName:    "validate",
 			output: struct {
 				Msg   string `json:"msg"`
 				Valid bool   `json:"valid"`
 			}{},
-			wantedOutput: &struct {
+			wantedOutput: struct {
 				Msg   string `json:"msg"`
 				Valid bool   `json:"valid"`
 			}{
-				Msg:   "hello cue",
-				Valid: true,
+				Valid: false,
 			},
 			wantedErr: OutputNotSettableErr,
 		},
 		{
-			name: "cue-failed-output-type",
+			name: "cue-failed-output-nil",
 			cue: `
 object: _ @tag(object)
 
@@ -107,23 +108,38 @@ validate:{
 }
 `,
 			parameterName: "object",
-			parameter:     helper.NewDeployment("ut-cue-failed-output-nil", "default"),
+			parameter:     helper.NewDeployment(metav1.NamespaceDefault, "ut-cue-failed-output-nil"),
 			outputName:    "validate",
 			output:        nil,
+			wantedOutput:  nil,
+			wantedErr:     OutputNilErr,
+		},
+		{
+			name: "cue-failed-without-output",
+			cue: `
+object: _ @tag(object)
+`,
+			parameterName: "object",
+			parameter:     helper.NewDeployment(metav1.NamespaceDefault, "ut-cue-failed-without-output"),
+			outputName:    "validate",
+			output: &struct {
+				Msg   string `json:"msg"`
+				Valid bool   `json:"valid"`
+			}{},
 			wantedOutput: &struct {
 				Msg   string `json:"msg"`
 				Valid bool   `json:"valid"`
 			}{
-				Msg:   "hello cue",
-				Valid: true,
+				Valid: false,
 			},
-			wantedErr: OutputNilErr,
+			wantedErr: OutputNotFoundErr,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := CueDoAndReturn(tt.cue, tt.parameterName, tt.parameter, tt.outputName, tt.output); !reflect.DeepEqual(got, tt.wantedErr) {
+			if got := CueDoAndReturn(tt.cue, tt.parameterName, tt.parameter, tt.outputName, tt.output); !reflect.DeepEqual(got, tt.wantedErr) ||
+				!reflect.DeepEqual(tt.output, tt.wantedOutput) {
 				t.Errorf("CueDoAndReturn() = %v, output = %v, want: %v, %v", got, tt.output, tt.wantedErr, tt.wantedOutput)
 			}
 		})
