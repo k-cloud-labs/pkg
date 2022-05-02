@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	ParameterNotFoundErr = errors.New("parameter not found in cue")
+	OutputNotFoundErr    = errors.New("output not found in cue")
 	OutputNilErr         = errors.New("output must not be nil")
 	OutputNotSettableErr = errors.New("output must be settable")
 )
@@ -68,7 +68,7 @@ func CueDoAndReturn(template string, parameterName string, parameter interface{}
 
 	result := value.LookupPath(cue.ParsePath(outputName))
 	if !result.Exists() {
-		return ParameterNotFoundErr
+		return OutputNotFoundErr
 	}
 
 	if err := result.Decode(output); err != nil {
