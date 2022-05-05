@@ -19,3 +19,6 @@ vendor/
 
 # bin
 bin/
+
+# tmp
+_tmp/
