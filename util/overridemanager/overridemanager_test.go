@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	admissionv1 "k8s.io/api/admission/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -14,7 +15,6 @@ import (
 	v1alpha10 "github.com/k-cloud-labs/pkg/client/listers/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/test/helper"
 	"github.com/k-cloud-labs/pkg/test/mock"
-	"github.com/k-cloud-labs/pkg/util"
 	utilhelper "github.com/k-cloud-labs/pkg/util/converter"
 )
 
@@ -64,11 +64,11 @@ func TestGetMatchingOverridePolicies(t *testing.T) {
 			},
 			OverrideRules: []policyv1alpha1.RuleWithOperation{
 				{
-					TargetOperations: []string{util.Create},
+					TargetOperations: []admissionv1.Operation{admissionv1.Create},
 					Overriders:       overriders1,
 				},
 				{
-					TargetOperations: []string{util.Update},
+					TargetOperations: []admissionv1.Operation{admissionv1.Update},
 					Overriders:       overriders2,
 				},
 			},
@@ -82,7 +82,7 @@ func TestGetMatchingOverridePolicies(t *testing.T) {
 		Spec: policyv1alpha1.OverridePolicySpec{
 			OverrideRules: []policyv1alpha1.RuleWithOperation{
 				{
-					TargetOperations: []string{util.Create, util.Update},
+					TargetOperations: []admissionv1.Operation{admissionv1.Create, admissionv1.Update},
 					Overriders:       overriders3,
 				},
 			},
@@ -108,14 +108,14 @@ func TestGetMatchingOverridePolicies(t *testing.T) {
 		name             string
 		policies         []GeneralOverridePolicy
 		resource         *unstructured.Unstructured
-		operation        string
+		operation        admissionv1.Operation
 		wantedOverriders []policyOverriders
 	}{
 		{
 			name:      "OverrideRules test 1",
 			policies:  []GeneralOverridePolicy{overridePolicy1, overridePolicy2, overridePolicy3},
 			resource:  deploymentObj,
-			operation: util.Create,
+			operation: admissionv1.Create,
 			wantedOverriders: []policyOverriders{
 				{
 					name:       overridePolicy1.Name,
@@ -138,7 +138,7 @@ func TestGetMatchingOverridePolicies(t *testing.T) {
 			name:      "OverrideRules test 2",
 			policies:  []GeneralOverridePolicy{overridePolicy1, overridePolicy2, overridePolicy3},
 			resource:  deploymentObj,
-			operation: util.Update,
+			operation: admissionv1.Update,
 			wantedOverriders: []policyOverriders{
 				{
 					name:       overridePolicy1.Name,
@@ -224,7 +224,7 @@ patches: [{
 			},
 			OverrideRules: []policyv1alpha1.RuleWithOperation{
 				{
-					TargetOperations: []string{util.Create},
+					TargetOperations: []admissionv1.Operation{admissionv1.Create},
 					Overriders:       overriders1,
 				},
 			},
@@ -245,7 +245,7 @@ patches: [{
 			},
 			OverrideRules: []policyv1alpha1.RuleWithOperation{
 				{
-					TargetOperations: []string{util.Create},
+					TargetOperations: []admissionv1.Operation{admissionv1.Create},
 					Overriders:       overriders2,
 				},
 			},
@@ -258,7 +258,7 @@ patches: [{
 		Spec: policyv1alpha1.OverridePolicySpec{
 			OverrideRules: []policyv1alpha1.RuleWithOperation{
 				{
-					TargetOperations: []string{util.Create, util.Update},
+					TargetOperations: []admissionv1.Operation{admissionv1.Create, admissionv1.Update},
 					Overriders:       overriders3,
 				},
 			},
@@ -275,18 +275,18 @@ patches: [{
 	opLister.EXPECT().List(labels.Everything()).Return([]*policyv1alpha1.OverridePolicy{
 		overridePolicy1,
 		overridePolicy2,
-	}, nil)
+	}, nil).AnyTimes()
 
 	copLister.EXPECT().List(labels.Everything()).Return([]*policyv1alpha1.ClusterOverridePolicy{
 		overridePolicy3,
-	}, nil)
+	}, nil).AnyTimes()
 
 	tests := []struct {
 		name              string
 		opLister          v1alpha10.OverridePolicyLister
 		copLister         v1alpha10.ClusterOverridePolicyLister
 		resource          *unstructured.Unstructured
-		operation         string
+		operation         admissionv1.Operation
 		wantedCOPs        *AppliedOverrides
 		wantedOPs         *AppliedOverrides
 		wantedAnnotations map[string]string
@@ -297,7 +297,7 @@ patches: [{
 			opLister:  opLister,
 			copLister: copLister,
 			resource:  deploymentObj,
-			operation: util.Create,
+			operation: admissionv1.Create,
 			wantedErr: nil,
 			wantedOPs: &AppliedOverrides{
 				AppliedItems: []OverridePolicyShadow{

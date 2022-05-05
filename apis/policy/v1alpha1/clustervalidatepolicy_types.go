@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -34,11 +35,11 @@ type ClusterValidatePolicySpec struct {
 
 // ValidateRuleWithOperation defines the validate rules on operations.
 type ValidateRuleWithOperation struct {
-	// TargetOperations defines restrictions on this validate policy
-	// that only applies to resources propagated to the matching operations.
-	// nil means matching all mutate operations.
-	// +optional
-	TargetOperations []string `json:"targetOperations,omitempty"`
+	// Operations is the operations the admission hook cares about - CREATE, UPDATE, DELETE, CONNECT or *
+	// for all of those operations and any future admission operations that are added.
+	// If '*' is present, the length of the slice must be one.
+	// Required.
+	TargetOperations []admissionv1.Operation `json:"targetOperations,omitempty"`
 
 	// Cue represents validate rules defined with cue code.
 	// +required
