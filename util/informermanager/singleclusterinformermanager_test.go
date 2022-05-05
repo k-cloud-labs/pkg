@@ -15,27 +15,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-type triggerFunc func(gvr schema.GroupVersionResource, ns string, fakeClient *fake.FakeDynamicClient, testObject *unstructured.Unstructured) *unstructured.Unstructured
-
-func triggerFactory(t *testing.T) triggerFunc {
-	return func(gvr schema.GroupVersionResource, ns string, fakeClient *fake.FakeDynamicClient, _ *unstructured.Unstructured) *unstructured.Unstructured {
-		testObject := newUnstructured("apps/v1", "Deployment", "ns-foo", "name-foo")
-		createdObj, err := fakeClient.Resource(gvr).Namespace(ns).Create(context.TODO(), testObject, metav1.CreateOptions{})
-		if err != nil {
-			t.Error(err)
-		}
-		return createdObj
-	}
-}
-
-func handler(rcvCh chan<- *unstructured.Unstructured) *cache.ResourceEventHandlerFuncs {
-	return &cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			rcvCh <- obj.(*unstructured.Unstructured)
-		},
-	}
-}
-
 func TestSingleClusterInformerManager(t *testing.T) {
 	scenarios := []struct {
 		name        string
