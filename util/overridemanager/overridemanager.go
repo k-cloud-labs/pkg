@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	jsonpatch "github.com/evanphx/json-patch"
+	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog/v2"
@@ -25,7 +26,7 @@ type OverrideManager interface {
 	// For namespaced scoped resource, apply order is:
 	// - First apply ClusterOverridePolicy;
 	// - Then apply OverridePolicy;
-	ApplyOverridePolicies(rawObj *unstructured.Unstructured, operation string) (appliedCOPs *AppliedOverrides, appliedOPs *AppliedOverrides, err error)
+	ApplyOverridePolicies(rawObj *unstructured.Unstructured, operation admissionv1.Operation) (appliedCOPs *AppliedOverrides, appliedOPs *AppliedOverrides, err error)
 }
 
 // GeneralOverridePolicy is an abstract object of ClusterOverridePolicy and OverridePolicy
@@ -63,7 +64,7 @@ func NewOverrideManager(copLister v1alpha1.ClusterOverridePolicyLister, opLister
 	}
 }
 
-func (o *overrideManagerImpl) ApplyOverridePolicies(rawObj *unstructured.Unstructured, operation string) (*AppliedOverrides, *AppliedOverrides, error) {
+func (o *overrideManagerImpl) ApplyOverridePolicies(rawObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, *AppliedOverrides, error) {
 	var (
 		appliedCOPs *AppliedOverrides
 		appliedOPs  *AppliedOverrides
@@ -88,7 +89,7 @@ func (o *overrideManagerImpl) ApplyOverridePolicies(rawObj *unstructured.Unstruc
 	return appliedCOPs, appliedOPs, nil
 }
 
-func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj *unstructured.Unstructured, operation string) (*AppliedOverrides, error) {
+func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, error) {
 	cops, err := o.copLister.List(labels.Everything())
 	if err != nil {
 		klog.ErrorS(err, "Failed to list cluster override policies.")
@@ -123,7 +124,7 @@ func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj *unstructured.
 	return appliedOverrides, nil
 }
 
-func (o *overrideManagerImpl) applyOverridePolicies(rawObj *unstructured.Unstructured, operation string) (*AppliedOverrides, error) {
+func (o *overrideManagerImpl) applyOverridePolicies(rawObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, error) {
 	ops, err := o.opLister.List(labels.Everything())
 	if err != nil {
 		klog.ErrorS(err, "Failed to list override policies.", "namespace", rawObj.GetNamespace())
@@ -158,7 +159,7 @@ func (o *overrideManagerImpl) applyOverridePolicies(rawObj *unstructured.Unstruc
 	return appliedOverriders, nil
 }
 
-func (o *overrideManagerImpl) getOverridersFromOverridePolicies(policies []GeneralOverridePolicy, resource *unstructured.Unstructured, operation string) []policyOverriders {
+func (o *overrideManagerImpl) getOverridersFromOverridePolicies(policies []GeneralOverridePolicy, resource *unstructured.Unstructured, operation admissionv1.Operation) []policyOverriders {
 	resourceMatchingPolicies := make([]GeneralOverridePolicy, 0)
 
 	for _, policy := range policies {
@@ -248,7 +249,7 @@ func parseJSONPatchesByPlaintext(overriders []policyv1alpha1.PlaintextOverrider)
 
 func executeCue(rawObj *unstructured.Unstructured, template string) (*[]overrideOption, error) {
 	result := make([]overrideOption, 0)
-	if err := cue.CueDoAndReturn(template, util.ParameterName, rawObj, util.OverrideOutputName, &result); err != nil {
+	if err := cue.CueDoAndReturn(template, []cue.Parameter{{Name: util.ObjectParameterName, Object: rawObj}}, util.OverrideOutputName, &result); err != nil {
 		return nil, err
 	}
 

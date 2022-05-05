@@ -11,18 +11,6 @@ const (
 	AppliedClusterOverrides = "policy.kcloudlabs.io/applied-cluster-overrides"
 )
 
-// Define supported mutate operation
-const (
-	// Create operation
-	Create = "Create"
-
-	// Update operation
-	Update = "Update"
-
-	// Delete operation
-	Delete = "Delete"
-)
-
 // Define resource filed
 const (
 	// SpecField indicates the 'spec' field of a resource
@@ -31,8 +19,10 @@ const (
 
 // Define cue parameter and output name
 const (
-	// ParameterName is the parameter name defined in cue
-	ParameterName = "object"
+	// ObjectParameterName is the object parameter name defined in cue
+	ObjectParameterName = "object"
+	// OldObjectParameterName is the old object parameter name defined in cue, only used with "Update" operation for validate policy
+	OldObjectParameterName = "oldObject"
 	// OverrideOutputName is the output name defined in cue for override policy
 	OverrideOutputName = "patches"
 	// ValidateOutputName is the output name defined in cue for validate policy

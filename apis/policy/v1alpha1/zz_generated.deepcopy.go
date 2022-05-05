@@ -22,7 +22,8 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/api/admission/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -301,7 +302,7 @@ func (in *ResourceSelector) DeepCopyInto(out *ResourceSelector) {
 	*out = *in
 	if in.LabelSelector != nil {
 		in, out := &in.LabelSelector, &out.LabelSelector
-		*out = new(v1.LabelSelector)
+		*out = new(metav1.LabelSelector)
 		(*in).DeepCopyInto(*out)
 	}
 }
@@ -321,7 +322,7 @@ func (in *RuleWithOperation) DeepCopyInto(out *RuleWithOperation) {
 	*out = *in
 	if in.TargetOperations != nil {
 		in, out := &in.TargetOperations, &out.TargetOperations
-		*out = make([]string, len(*in))
+		*out = make([]v1.Operation, len(*in))
 		copy(*out, *in)
 	}
 	in.Overriders.DeepCopyInto(&out.Overriders)
@@ -342,7 +343,7 @@ func (in *ValidateRuleWithOperation) DeepCopyInto(out *ValidateRuleWithOperation
 	*out = *in
 	if in.TargetOperations != nil {
 		in, out := &in.TargetOperations, &out.TargetOperations
-		*out = make([]string, len(*in))
+		*out = make([]v1.Operation, len(*in))
 		copy(*out, *in)
 	}
 }

@@ -5,12 +5,11 @@
 package mock
 
 import (
-	"reflect"
+	reflect "reflect"
 
-	"github.com/golang/mock/gomock"
-	"k8s.io/apimachinery/pkg/labels"
-
-	"github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
+	gomock "github.com/golang/mock/gomock"
+	v1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
+	labels "k8s.io/apimachinery/pkg/labels"
 )
 
 // MockClusterValidatePolicyLister is a mock of ClusterValidatePolicyLister interface.

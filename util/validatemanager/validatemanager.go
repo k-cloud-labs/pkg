@@ -1,6 +1,7 @@
 package validatemanager
 
 import (
+	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog/v2"
@@ -14,7 +15,7 @@ import (
 // ValidateManager managers validate policies for operation
 type ValidateManager interface {
 	// ApplyValidatePolicies validate the object if one or more matched validate policy exist.
-	ApplyValidatePolicies(rawObj *unstructured.Unstructured, operation string) (*ValidateResult, error)
+	ApplyValidatePolicies(obj *unstructured.Unstructured, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*ValidateResult, error)
 }
 
 type validateManagerImpl struct {
@@ -32,7 +33,7 @@ func NewValidateManager(cvpLister v1alpha1.ClusterValidatePolicyLister) Validate
 	}
 }
 
-func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstructured, operation string) (*ValidateResult, error) {
+func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstructured, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*ValidateResult, error) {
 	cvps, err := m.cvpLister.List(labels.Everything())
 	if err != nil {
 		klog.ErrorS(err, "Failed to list validate policies.")
@@ -50,7 +51,10 @@ func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstruc
 		if len(cvp.Spec.ResourceSelectors) == 0 || util.ResourceMatchSelectors(rawObj, cvp.Spec.ResourceSelectors...) {
 			for _, rule := range cvp.Spec.ValidateRules {
 				if len(rule.TargetOperations) == 0 || slice.Exists(rule.TargetOperations, operation) {
-					result, err := executeCue(rawObj, rule.Cue)
+					if operation == admissionv1.Update {
+						oldObj = nil
+					}
+					result, err := executeCue(rawObj, oldObj, rule.Cue)
 					if err != nil {
 						klog.ErrorS(err, "Failed to apply validate policy.", "validatepolicy", cvp.Name, "resource", klog.KObj(rawObj))
 						return result, err
@@ -66,9 +70,22 @@ func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstruc
 	}, nil
 }
 
-func executeCue(rawObj *unstructured.Unstructured, template string) (*ValidateResult, error) {
+func executeCue(rawObj *unstructured.Unstructured, oldObj *unstructured.Unstructured, template string) (*ValidateResult, error) {
 	result := ValidateResult{}
-	if err := cue.CueDoAndReturn(template, util.ParameterName, rawObj, util.ValidateOutputName, &result); err != nil {
+	parameters := []cue.Parameter{
+		{
+			Name:   util.ObjectParameterName,
+			Object: rawObj,
+		},
+	}
+
+	if oldObj != nil {
+		parameters = append(parameters, cue.Parameter{
+			Name:   util.OldObjectParameterName,
+			Object: oldObj,
+		})
+	}
+	if err := cue.CueDoAndReturn(template, parameters, util.ValidateOutputName, &result); err != nil {
 		return nil, err
 	}
 

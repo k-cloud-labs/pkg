@@ -18,9 +18,14 @@ var (
 	OutputNotSettableErr = errors.New("output must be settable")
 )
 
+type Parameter struct {
+	Name   string
+	Object interface{}
+}
+
 // CueDoAndReturn will execute cue code and set execution result to output.
 // output must not be nil and must be settable.
-func CueDoAndReturn(template string, parameterName string, parameter interface{}, outputName string, output interface{}) error {
+func CueDoAndReturn(template string, parameters []Parameter, outputName string, output interface{}) error {
 	// output check
 	if isNil(output) {
 		return OutputNilErr
@@ -42,21 +47,23 @@ func CueDoAndReturn(template string, parameterName string, parameter interface{}
 		return err
 	}
 
-	// add parameter
-	if !isNil(parameter) {
-		bt, err := json.Marshal(parameter)
-		if err != nil {
-			return err
-		}
+	// add parameters
+	for _, parameter := range parameters {
+		if !isNil(parameter) {
+			bt, err := json.Marshal(parameter.Object)
+			if err != nil {
+				return err
+			}
 
-		paramFile := fmt.Sprintf("%s: %s", parameterName, string(bt))
-		fs, err = parser.ParseFile("parameter", paramFile)
-		if err != nil {
-			return err
-		}
+			paramFile := fmt.Sprintf("%s: %s", parameter.Name, string(bt))
+			fs, err = parser.ParseFile("parameter", paramFile)
+			if err != nil {
+				return err
+			}
 
-		if err = bi.AddSyntax(fs); err != nil {
-			return err
+			if err = bi.AddSyntax(fs); err != nil {
+				return err
+			}
 		}
 	}
 
