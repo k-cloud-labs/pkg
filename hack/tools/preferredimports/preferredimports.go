@@ -255,7 +255,7 @@ func main() {
 	a := newAnalyzer()
 	for _, dir := range c.dirs {
 		if isTerminal {
-			fmt.Printf("\r\033[0m %-80s", dir)
+			fmt.Println(fmt.Sprintf("\r\033[0m %-80s", dir))
 		}
 		a.collect(dir)
 	}
