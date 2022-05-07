@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/util"
 )
 
@@ -105,6 +106,36 @@ func ConvertToService(obj *unstructured.Unstructured) (*corev1.Service, error) {
 // ConvertToIngress converts a Service object from unstructured to typed.
 func ConvertToIngress(obj *unstructured.Unstructured) (*extensionsv1beta1.Ingress, error) {
 	typedObj := &extensionsv1beta1.Ingress{}
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), typedObj); err != nil {
+		return nil, err
+	}
+
+	return typedObj, nil
+}
+
+// ConvertToClusterValidatePolicy converts a ClusterValidatePolicy Object from unstructured to typed
+func ConvertToClusterValidatePolicy(obj *unstructured.Unstructured) (*policyv1alpha1.ClusterValidatePolicy, error) {
+	typedObj := &policyv1alpha1.ClusterValidatePolicy{}
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), typedObj); err != nil {
+		return nil, err
+	}
+
+	return typedObj, nil
+}
+
+// ConvertToClusterOverridePolicy converts a ClusterOverridePolicy Object from unstructured to typed
+func ConvertToClusterOverridePolicy(obj *unstructured.Unstructured) (*policyv1alpha1.ClusterOverridePolicy, error) {
+	typedObj := &policyv1alpha1.ClusterOverridePolicy{}
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), typedObj); err != nil {
+		return nil, err
+	}
+
+	return typedObj, nil
+}
+
+// ConvertToOverridePolicy converts a Override Object from unstructured to typed
+func ConvertToOverridePolicy(obj *unstructured.Unstructured) (*policyv1alpha1.OverridePolicy, error) {
+	typedObj := &policyv1alpha1.OverridePolicy{}
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), typedObj); err != nil {
 		return nil, err
 	}
