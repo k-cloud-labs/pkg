@@ -60,7 +60,7 @@ spec:
                               that overrides target fields according to path, operator
                               and value.
                             properties:
-                              operator:
+                              op:
                                 description: 'Operator indicates the operation on
                                   target field. Available operators are: add, update
                                   and remove.'
@@ -77,7 +77,7 @@ spec:
                                   Must be empty when operator is Remove.
                                 x-kubernetes-preserve-unknown-fields: true
                             required:
-                            - operator
+                            - op
                             - path
                             type: object
                           type: array

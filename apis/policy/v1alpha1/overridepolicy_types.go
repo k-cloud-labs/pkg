@@ -96,7 +96,7 @@ type PlaintextOverrider struct {
 	// Operator indicates the operation on target field.
 	// Available operators are: add, update and remove.
 	// +kubebuilder:validation:Enum=add;remove;replace
-	Operator OverriderOperator `json:"operator"`
+	Operator OverriderOperator `json:"op"`
 	// Value to be applied to target field.
 	// Must be empty when operator is Remove.
 	// +optional
