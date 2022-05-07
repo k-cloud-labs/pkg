@@ -57,9 +57,12 @@ func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstruc
 					result, err := executeCue(rawObj, oldObj, rule.Cue)
 					if err != nil {
 						klog.ErrorS(err, "Failed to apply validate policy.", "validatepolicy", cvp.Name, "resource", klog.KObj(rawObj))
-						return result, err
+						return nil, err
 					}
 					klog.V(2).InfoS("Applied validate policy.", "validatepolicy", cvp.Name, "resource", klog.KObj(rawObj))
+					if !result.Valid {
+						return result, nil
+					}
 				}
 			}
 		}

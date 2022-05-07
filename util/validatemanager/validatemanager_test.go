@@ -71,7 +71,7 @@ validate: {
 			oldObject: nil,
 			wantedErr: nil,
 			wantedResult: &ValidateResult{
-				Valid: true,
+				Valid: false,
 			},
 		},
 		{
