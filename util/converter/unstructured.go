@@ -1,4 +1,4 @@
-package helper
+package converter
 
 import (
 	appsv1 "k8s.io/api/apps/v1"
