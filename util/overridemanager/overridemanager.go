@@ -92,7 +92,7 @@ func (o *overrideManagerImpl) ApplyOverridePolicies(rawObj *unstructured.Unstruc
 func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, error) {
 	cops, err := o.copLister.List(labels.Everything())
 	if err != nil {
-		klog.ErrorS(err, "Failed to list cluster override policies.")
+		klog.ErrorS(err, "Failed to list cluster override policies.", "resource", klog.KObj(rawObj), "operation", operation)
 		return nil, err
 	}
 
@@ -107,17 +107,17 @@ func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj *unstructured.
 
 	matchingPolicyOverriders := o.getOverridersFromOverridePolicies(items, rawObj, operation)
 	if len(matchingPolicyOverriders) == 0 {
-		klog.V(2).InfoS("No cluster override policy.", "resource", klog.KObj(rawObj))
+		klog.V(2).InfoS("No cluster override policy.", "resource", klog.KObj(rawObj), "operation", operation)
 		return nil, nil
 	}
 
 	appliedOverrides := &AppliedOverrides{}
 	for _, p := range matchingPolicyOverriders {
 		if err := applyPolicyOverriders(rawObj, p.overriders); err != nil {
-			klog.ErrorS(err, "Failed to apply cluster overriders.", "clusteroverridepolicy", p.name, "resource", klog.KObj(rawObj))
+			klog.ErrorS(err, "Failed to apply cluster overriders.", "clusteroverridepolicy", p.name, "resource", klog.KObj(rawObj), "operation", operation)
 			return nil, err
 		}
-		klog.V(2).InfoS("Applied cluster overriders.", "clusteroverridepolicy", p.name, "resource", klog.KObj(rawObj))
+		klog.V(2).InfoS("Applied cluster overriders.", "clusteroverridepolicy", p.name, "resource", klog.KObj(rawObj), "operation", operation)
 		appliedOverrides.Add(p.name, p.overriders)
 	}
 
@@ -127,7 +127,7 @@ func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj *unstructured.
 func (o *overrideManagerImpl) applyOverridePolicies(rawObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, error) {
 	ops, err := o.opLister.List(labels.Everything())
 	if err != nil {
-		klog.ErrorS(err, "Failed to list override policies.", "namespace", rawObj.GetNamespace())
+		klog.ErrorS(err, "Failed to list override policies.", "namespace", rawObj.GetNamespace(), "resource", klog.KObj(rawObj), "operation", operation)
 		return nil, err
 	}
 
@@ -142,17 +142,17 @@ func (o *overrideManagerImpl) applyOverridePolicies(rawObj *unstructured.Unstruc
 
 	matchingPolicyOverriders := o.getOverridersFromOverridePolicies(items, rawObj, operation)
 	if len(matchingPolicyOverriders) == 0 {
-		klog.V(2).InfoS("No override policy.", "resource", klog.KObj(rawObj))
+		klog.V(2).InfoS("No override policy.", "resource", klog.KObj(rawObj), "operation", operation)
 		return nil, nil
 	}
 
 	appliedOverriders := &AppliedOverrides{}
 	for _, p := range matchingPolicyOverriders {
 		if err := applyPolicyOverriders(rawObj, p.overriders); err != nil {
-			klog.ErrorS(err, "Failed to apply overriders.", "overridepolicy", fmt.Sprintf("%s/%s", p.namespace, p.name), "resource", klog.KObj(rawObj))
+			klog.ErrorS(err, "Failed to apply overriders.", "overridepolicy", fmt.Sprintf("%s/%s", p.namespace, p.name), "resource", klog.KObj(rawObj), "operation", operation)
 			return nil, err
 		}
-		klog.V(2).InfoS("Applied overriders", "overridepolicy", fmt.Sprintf("%s/%s", p.namespace, p.name), "resource", klog.KObj(rawObj))
+		klog.V(2).InfoS("Applied overriders", "overridepolicy", fmt.Sprintf("%s/%s", p.namespace, p.name), "resource", klog.KObj(rawObj), "operation", operation)
 		appliedOverriders.Add(p.name, p.overriders)
 	}
 

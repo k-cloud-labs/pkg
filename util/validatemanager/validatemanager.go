@@ -36,12 +36,12 @@ func NewValidateManager(cvpLister v1alpha1.ClusterValidatePolicyLister) Validate
 func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstructured, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*ValidateResult, error) {
 	cvps, err := m.cvpLister.List(labels.Everything())
 	if err != nil {
-		klog.ErrorS(err, "Failed to list validate policies.")
+		klog.ErrorS(err, "Failed to list validate policies.", "resource", klog.KObj(rawObj), "operation", operation)
 		return nil, err
 	}
 
 	if len(cvps) == 0 {
-		klog.V(2).InfoS("No validate policy.", "resource", klog.KObj(rawObj))
+		klog.V(2).InfoS("No validate policy.", "resource", klog.KObj(rawObj), "operation", operation)
 		return &ValidateResult{
 			Valid: true,
 		}, nil
@@ -56,10 +56,10 @@ func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstruc
 					}
 					result, err := executeCue(rawObj, oldObj, rule.Cue)
 					if err != nil {
-						klog.ErrorS(err, "Failed to apply validate policy.", "validatepolicy", cvp.Name, "resource", klog.KObj(rawObj))
+						klog.ErrorS(err, "Failed to apply validate policy.", "validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
 						return nil, err
 					}
-					klog.V(2).InfoS("Applied validate policy.", "validatepolicy", cvp.Name, "resource", klog.KObj(rawObj))
+					klog.V(2).InfoS("Applied validate policy.", "validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
 					if !result.Valid {
 						return result, nil
 					}
