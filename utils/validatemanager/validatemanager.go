@@ -7,9 +7,9 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/k-cloud-labs/pkg/client/listers/policy/v1alpha1"
-	"github.com/k-cloud-labs/pkg/util"
-	"github.com/k-cloud-labs/pkg/util/cue"
-	"github.com/k-cloud-labs/pkg/util/slice"
+	"github.com/k-cloud-labs/pkg/utils"
+	"github.com/k-cloud-labs/pkg/utils/cue"
+	"github.com/k-cloud-labs/pkg/utils/util"
 )
 
 // ValidateManager managers validate policies for operation
@@ -48,9 +48,9 @@ func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstruc
 	}
 
 	for _, cvp := range cvps {
-		if len(cvp.Spec.ResourceSelectors) == 0 || util.ResourceMatchSelectors(rawObj, cvp.Spec.ResourceSelectors...) {
+		if len(cvp.Spec.ResourceSelectors) == 0 || utils.ResourceMatchSelectors(rawObj, cvp.Spec.ResourceSelectors...) {
 			for _, rule := range cvp.Spec.ValidateRules {
-				if len(rule.TargetOperations) == 0 || slice.Exists(rule.TargetOperations, operation) {
+				if len(rule.TargetOperations) == 0 || util.Exists(rule.TargetOperations, operation) {
 					if operation == admissionv1.Update {
 						oldObj = nil
 					}
@@ -77,18 +77,18 @@ func executeCue(rawObj *unstructured.Unstructured, oldObj *unstructured.Unstruct
 	result := ValidateResult{}
 	parameters := []cue.Parameter{
 		{
-			Name:   util.ObjectParameterName,
+			Name:   utils.ObjectParameterName,
 			Object: rawObj,
 		},
 	}
 
 	if oldObj != nil {
 		parameters = append(parameters, cue.Parameter{
-			Name:   util.OldObjectParameterName,
+			Name:   utils.OldObjectParameterName,
 			Object: oldObj,
 		})
 	}
-	if err := cue.CueDoAndReturn(template, parameters, util.ValidateOutputName, &result); err != nil {
+	if err := cue.CueDoAndReturn(template, parameters, utils.ValidateOutputName, &result); err != nil {
 		return nil, err
 	}
 
