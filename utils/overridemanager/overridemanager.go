@@ -13,9 +13,9 @@ import (
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/client/listers/policy/v1alpha1"
-	"github.com/k-cloud-labs/pkg/util"
-	"github.com/k-cloud-labs/pkg/util/cue"
-	"github.com/k-cloud-labs/pkg/util/slice"
+	"github.com/k-cloud-labs/pkg/utils"
+	"github.com/k-cloud-labs/pkg/utils/cue"
+	"github.com/k-cloud-labs/pkg/utils/util"
 )
 
 // OverrideManager managers override policies for operation
@@ -168,7 +168,7 @@ func (o *overrideManagerImpl) getOverridersFromOverridePolicies(policies []Gener
 			continue
 		}
 
-		if util.ResourceMatchSelectors(resource, policy.GetOverridePolicySpec().ResourceSelectors...) {
+		if utils.ResourceMatchSelectors(resource, policy.GetOverridePolicySpec().ResourceSelectors...) {
 			resourceMatchingPolicies = append(resourceMatchingPolicies, policy)
 		}
 	}
@@ -177,7 +177,7 @@ func (o *overrideManagerImpl) getOverridersFromOverridePolicies(policies []Gener
 
 	for _, policy := range resourceMatchingPolicies {
 		for _, rule := range policy.GetOverridePolicySpec().OverrideRules {
-			if len(rule.TargetOperations) == 0 || slice.Exists(rule.TargetOperations, operation) {
+			if len(rule.TargetOperations) == 0 || util.Exists(rule.TargetOperations, operation) {
 				matchingPolicyOverriders = append(matchingPolicyOverriders, policyOverriders{
 					name:       policy.GetName(),
 					namespace:  policy.GetNamespace(),
@@ -249,7 +249,7 @@ func parseJSONPatchesByPlaintext(overriders []policyv1alpha1.PlaintextOverrider)
 
 func executeCue(rawObj *unstructured.Unstructured, template string) (*[]overrideOption, error) {
 	result := make([]overrideOption, 0)
-	if err := cue.CueDoAndReturn(template, []cue.Parameter{{Name: util.ObjectParameterName, Object: rawObj}}, util.OverrideOutputName, &result); err != nil {
+	if err := cue.CueDoAndReturn(template, []cue.Parameter{{Name: utils.ObjectParameterName, Object: rawObj}}, utils.OverrideOutputName, &result); err != nil {
 		return nil, err
 	}
 

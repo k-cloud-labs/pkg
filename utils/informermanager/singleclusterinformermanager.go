@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/k-cloud-labs/pkg/util"
+	"github.com/k-cloud-labs/pkg/utils"
 )
 
 // SingleClusterInformerManager manages dynamic shared informer for all resources, include Kubernetes resource and
@@ -62,7 +62,7 @@ type SingleClusterInformerManager interface {
 // NewSingleClusterInformerManager constructs a new instance of singleClusterInformerManagerImpl.
 // defaultResync with value '0' means no re-sync.
 func NewSingleClusterInformerManager(client dynamic.Interface, defaultResync time.Duration, parentCh <-chan struct{}) SingleClusterInformerManager {
-	ctx, cancel := util.ContextForChannel(parentCh)
+	ctx, cancel := utils.ContextForChannel(parentCh)
 	return &singleClusterInformerManagerImpl{
 		informerFactory: dynamicinformer.NewDynamicSharedInformerFactory(client, defaultResync),
 		handlers:        make(map[schema.GroupVersionResource][]cache.ResourceEventHandler),

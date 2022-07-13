@@ -10,6 +10,10 @@ import (
 	"cuelang.org/go/cue/build"
 	"cuelang.org/go/cue/cuecontext"
 	"cuelang.org/go/cue/parser"
+	"k8s.io/klog/v2"
+
+	_ "github.com/k-cloud-labs/pkg/builtin/http"
+	"github.com/k-cloud-labs/pkg/builtin/registry"
 )
 
 var (
@@ -73,6 +77,14 @@ func CueDoAndReturn(template string, parameters []Parameter, outputName string, 
 		return err
 	}
 
+	// 1. execute http task
+	v, err := process(&value)
+	if err != nil {
+		return err
+	}
+	value = *v
+
+	// 2. generate result
 	result := value.LookupPath(cue.ParsePath(outputName))
 	if !result.Exists() {
 		return OutputNotFoundErr
@@ -83,6 +95,61 @@ func CueDoAndReturn(template string, parameters []Parameter, outputName string, 
 	}
 
 	return nil
+}
+
+func process(v *cue.Value) (*cue.Value, error) {
+	taskVal := v.LookupPath(cue.ParsePath("processing.http"))
+	if !taskVal.Exists() {
+		klog.InfoS("there is no http in processing")
+		return v, nil
+	}
+	resp, err := exec(taskVal)
+	if err != nil {
+		return nil, fmt.Errorf("fail to exec http task, %w", err)
+	}
+
+	value := v.FillPath(cue.ParsePath("processing.output"), resp)
+
+	return &value, nil
+}
+
+func exec(v cue.Value) (map[string]interface{}, error) {
+	runner, err := getRunnerByKey("http", v)
+	if err != nil {
+		return nil, err
+	}
+
+	got, err := runner.Run(&registry.Meta{Obj: v})
+	if err != nil {
+		return nil, err
+	}
+	gotMap, ok := got.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("fail to convert got to map")
+	}
+	body, ok := gotMap["body"].(string)
+	if !ok {
+		return nil, fmt.Errorf("fail to convert body to string")
+	}
+	resp := make(map[string]interface{})
+	if err := json.Unmarshal([]byte(body), &resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func getRunnerByKey(key string, v cue.Value) (registry.Runner, error) {
+	task := registry.LookupRunner(key)
+	if task == nil {
+		return nil, errors.New("there is no http task in task registry")
+	}
+
+	runner, err := task(v)
+	if err != nil {
+		return nil, err
+	}
+
+	return runner, nil
 }
 
 func isNil(i interface{}) bool {

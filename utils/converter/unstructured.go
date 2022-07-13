@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
-	"github.com/k-cloud-labs/pkg/util"
+	"github.com/k-cloud-labs/pkg/utils"
 )
 
 // ConvertToPod converts a Pod object from unstructured to typed.
@@ -145,12 +145,12 @@ func ConvertToOverridePolicy(obj *unstructured.Unstructured) (*policyv1alpha1.Ov
 
 // ApplyReplica applies the Replica value for the specific field.
 func ApplyReplica(workload *unstructured.Unstructured, desireReplica int64, field string) error {
-	_, ok, err := unstructured.NestedInt64(workload.Object, util.SpecField, field)
+	_, ok, err := unstructured.NestedInt64(workload.Object, utils.SpecField, field)
 	if err != nil {
 		return err
 	}
 	if ok {
-		err := unstructured.SetNestedField(workload.Object, desireReplica, util.SpecField, field)
+		err := unstructured.SetNestedField(workload.Object, desireReplica, utils.SpecField, field)
 		if err != nil {
 			return err
 		}

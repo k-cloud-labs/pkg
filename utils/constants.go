@@ -1,4 +1,4 @@
-package util
+package utils
 
 // Define annotations used by k-cloud-labs
 const (

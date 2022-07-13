@@ -1,0 +1,20 @@
+{
+    "CN": "example.net",
+    "hosts": [
+	"127.0.0.1",
+        "example.net",
+        "www.example.net"
+    ],
+    "key": {
+        "algo": "ecdsa",
+        "size": 256
+    },
+    "names": [
+        {
+            "C": "US",
+            "ST": "CA",
+            "L": "San Francisco"
+        }
+    ]
+}
+
