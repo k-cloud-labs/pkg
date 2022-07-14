@@ -15,7 +15,7 @@ import (
 	v1alpha10 "github.com/k-cloud-labs/pkg/client/listers/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/test/helper"
 	"github.com/k-cloud-labs/pkg/test/mock"
-	utilhelper "github.com/k-cloud-labs/pkg/utils/converter"
+	utilhelper "github.com/k-cloud-labs/pkg/utils/util"
 )
 
 func TestGetMatchingOverridePolicies(t *testing.T) {
