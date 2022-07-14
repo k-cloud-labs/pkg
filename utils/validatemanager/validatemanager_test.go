@@ -13,7 +13,7 @@ import (
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/test/helper"
 	"github.com/k-cloud-labs/pkg/test/mock"
-	utilhelper "github.com/k-cloud-labs/pkg/utils/converter"
+	utilhelper "github.com/k-cloud-labs/pkg/utils/util"
 )
 
 func TestValidateManagerImpl_ApplyValidatePolicies(t *testing.T) {

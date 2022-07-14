@@ -1,4 +1,4 @@
-package converter
+package util
 
 import (
 	appsv1 "k8s.io/api/apps/v1"
