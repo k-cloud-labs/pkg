@@ -179,9 +179,9 @@ processing: {
         User: "foo"
       }
     }
-    output: {
-      token?: string
-    }
+  }
+  output: {
+    token?: string
   }
 }
 
