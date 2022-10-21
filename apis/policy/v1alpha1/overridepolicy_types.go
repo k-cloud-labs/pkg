@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	admissionv1 "k8s.io/api/admission/v1"
+	v1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -75,7 +76,8 @@ type ResourceSelector struct {
 
 // Overriders offers various alternatives to represent the override rules.
 //
-// If more than one alternatives exist, they will be applied with following order:
+// If more than one alternative exist, they will be applied with following order:
+// - RenderCue
 // - Cue
 // - Plaintext
 type Overriders struct {
@@ -86,6 +88,97 @@ type Overriders struct {
 	// Cue represents override rules defined with cue code.
 	// +optional
 	Cue string `json:"cue,omitempty"`
+
+	// Rules is a list of rule which defines override rule, and
+	// it will be rendered to CUE and store in RenderedCue field, so
+	//if there are any data added manually will be erased.
+	// +optional
+	Rules []Rule `json:"rules,omitempty"`
+
+	// RenderedCue represents override rules defined by Rules.
+	// Don't modify the value of this field, modify Rules instead of.
+	// +optional
+	RenderedCue string `json:"renderedCue,omitempty"`
+}
+
+// RuleType is definition for type of single rule
+type RuleType string
+
+// The valid RuleTypes
+const (
+	RuleTypeAnnotations      RuleType = "annotations"
+	RuleTypeLabels           RuleType = "labels"
+	RuleTypeResourceOversell RuleType = "resourceOversell"
+	RuleTypeResource         RuleType = "resource"
+	RuleTypeAffinity         RuleType = "affinity"
+	RuleTypeTolerations      RuleType = "tolerations"
+)
+
+// Operation means override operation, like add/update value or delete fields
+type Operation string
+
+// Valid Operations
+const (
+	OperationAdd     Operation = "add"
+	OperationReplace Operation = "replace"
+	OperationDelete  Operation = "delete"
+)
+
+// ValueRefFrom defines where the override value comes from when value is refer other object or http response
+type ValueRefFrom string
+
+// Valid ValueRefFrom
+const (
+	// FromOwn means read data from own object
+	FromOwn ValueRefFrom = "own"
+	// FromK8s - read data from other object in current kubernetes
+	FromK8s ValueRefFrom = "k8s"
+	// FromHTTP - read data from http response
+	FromHTTP ValueRefFrom = "http"
+)
+
+// Rule represents a single rule definition
+type Rule struct {
+	Type      RuleType  `json:"type,omitempty"`
+	Operation Operation `json:"operation,omitempty"`
+	Path      string    `json:"path,omitempty"`
+	Value     any       `json:"value,omitempty"`
+	ValueRef  *ValueRef `json:"valueRef,omitempty"`
+
+	//resource
+	Resource *v1.ResourceRequirements `json:"resource,omitempty"`
+	// resource oversell
+	ResourceOversell *ResourceOversellRule `json:"resourceOversell,omitempty"`
+	// toleration
+	Tolerations []*v1.Toleration `json:"tolerations,omitempty"`
+	// affinity
+	Affinity *v1.Affinity `json:"affinity,omitempty"`
+}
+
+// ValueRef defines different types of ref data
+type ValueRef struct {
+	From ValueRefFrom `json:"from"`
+	// Path has different meaning, it represents current object field path like "/spec/replica" when From equals "own"
+	// and it also can be format like "data.result.x.y" when From equals "http", it represents the path in http response
+	Path string `json:"path"`
+	// ref k8s resource
+	*ResourceSelector `json:",inline"`
+	// ref http response
+	*HttpDataRef `json:",inline"`
+}
+
+// HttpDataRef defines a http request essential params
+type HttpDataRef struct {
+	URL    string            `json:"url,omitempty"`
+	Method string            `json:"method,omitempty"`
+	Params map[string]string `json:"params,omitempty"`
+}
+
+// ResourceOversellRule defines factor of resource oversell
+type ResourceOversellRule struct {
+	CpuFactor    float64 `json:"cpuFactor,omitempty"`
+	MemoryFactor float64 `json:"memoryFactor,omitempty"`
+	DiskFactor   float64 `json:"diskFactor,omitempty"`
 }
 
 // PlaintextOverrider is a simple overrider that overrides target fields
