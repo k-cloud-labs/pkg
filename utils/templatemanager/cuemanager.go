@@ -16,30 +16,33 @@ import (
 // CueManager defines methods of manage cue string, it provides various methods tomake sure the cue is valid.
 type CueManager interface {
 	// Format - format the cue string, it gets same result of running `cue fmt xxx.cue`
-	Format(src []byte) (result []byte, err error)
+	Format(src []byte, opts ...format.Option) (result []byte, err error)
 	// Validate - check the cue whether valid or not, it returns error if it's invalid
 	// Same as running `cue vet xxx.cue -c`
-	Validate(src []byte, data any) error
+	Validate(src []byte, data any, opts ...cue.Option) error
 	// DryRun - calculate/render cue with given data.
 	// Same as running `cue eval xxx.cue`
 	DryRun(src []byte, data any) (result []byte, err error)
 	// Exec -  execute cue with given data
-	Exec(src []byte, data any, output any) error
+	Exec(src []byte, data any, parsePath string, output any) error
 }
 
-type cueManagerImpl struct {
-	formatOpts   []format.Option
-	validateOpts []cue.Option
-	outputPath   string
-}
+type cueManagerImpl struct{}
 
 // NewCueManager init a new CueManager
 func NewCueManager() CueManager {
 	return &cueManagerImpl{}
 }
 
-func (c *cueManagerImpl) Format(src []byte) (result []byte, err error) {
-	res, err := format.Source(src, c.formatOpts...)
+func (c *cueManagerImpl) Format(src []byte, opts ...format.Option) (result []byte, err error) {
+	formatOptions := opts
+	if len(opts) == 0 {
+		formatOptions = []format.Option{
+			format.UseSpaces(4),
+			format.TabIndent(false),
+		}
+	}
+	res, err := format.Source(src, formatOptions...)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +56,15 @@ func (c *cueManagerImpl) Format(src []byte) (result []byte, err error) {
 	return res, nil
 }
 
-func (c *cueManagerImpl) Validate(src []byte, data any) error {
+func (c *cueManagerImpl) Validate(src []byte, data any, opts ...cue.Option) error {
+	validateOptions := opts
+	if len(opts) == 0 {
+		validateOptions = []cue.Option{
+			cue.Attributes(true),
+			cue.Definitions(true),
+			cue.Hidden(true),
+		}
+	}
 	bi := build.NewContext().NewInstance("", nil)
 	// add template
 	fs, err := parser.ParseFile("-", src, parser.ParseComments)
@@ -83,12 +94,7 @@ func (c *cueManagerImpl) Validate(src []byte, data any) error {
 	}
 
 	value := cuecontext.New().BuildInstance(bi)
-	opts := []cue.Option{
-		cue.Attributes(true),
-		cue.Definitions(true),
-		cue.Hidden(true),
-	}
-	err = value.Validate(opts...)
+	err = value.Validate(validateOptions...)
 	if err != nil {
 		return err
 	}
@@ -134,7 +140,7 @@ func (c *cueManagerImpl) DryRun(src []byte, data any) (result []byte, err error)
 	return value.Bytes()
 }
 
-func (c *cueManagerImpl) Exec(src []byte, data, output any) error {
+func (c *cueManagerImpl) Exec(src []byte, data any, parsePath string, output any) error {
 	bi := build.NewContext().NewInstance("", nil)
 	// add template
 	fs, err := parser.ParseFile("-", src, parser.ParseComments)
@@ -172,7 +178,7 @@ func (c *cueManagerImpl) Exec(src []byte, data, output any) error {
 	}
 
 	// 2. generate result
-	value = value.LookupPath(cue.ParsePath(c.outputPath))
+	value = value.LookupPath(cue.ParsePath(parsePath))
 	if !value.Exists() {
 		return value.Err()
 	}
