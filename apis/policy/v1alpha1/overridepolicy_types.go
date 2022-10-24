@@ -114,23 +114,15 @@ const (
 	RuleTypeTolerations      RuleType = "tolerations"
 )
 
-// Operation means override operation, like add/update value or delete fields
-type Operation string
-
-// Valid Operations
-const (
-	OperationAdd     Operation = "add"
-	OperationReplace Operation = "replace"
-	OperationDelete  Operation = "delete"
-)
-
 // ValueRefFrom defines where the override value comes from when value is refer other object or http response
 type ValueRefFrom string
 
 // Valid ValueRefFrom
 const (
-	// FromOwn means read data from own object
-	FromOwn ValueRefFrom = "own"
+	// FromCurrentObject means read data from current k8s object(the newest one when update operate intercept)
+	FromCurrentObject ValueRefFrom = "current"
+	// FromOldObject means read data from old object, only used when object be updated
+	FromOldObject ValueRefFrom = "current"
 	// FromK8s - read data from other object in current kubernetes
 	FromK8s ValueRefFrom = "k8s"
 	// FromHTTP - read data from http response
@@ -139,11 +131,11 @@ const (
 
 // Rule represents a single rule definition
 type Rule struct {
-	Type      RuleType  `json:"type,omitempty"`
-	Operation Operation `json:"operation,omitempty"`
-	Path      string    `json:"path,omitempty"`
-	Value     any       `json:"value,omitempty"`
-	ValueRef  *ValueRef `json:"valueRef,omitempty"`
+	Type      RuleType          `json:"type,omitempty"`
+	Operation OverriderOperator `json:"operation,omitempty"`
+	Path      string            `json:"path,omitempty"`
+	Value     any               `json:"value,omitempty"`
+	ValueRef  *ValueRef         `json:"valueRef,omitempty"`
 
 	//resource
 	Resource *v1.ResourceRequirements `json:"resource,omitempty"`
