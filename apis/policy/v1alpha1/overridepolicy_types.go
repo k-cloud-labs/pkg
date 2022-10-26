@@ -17,6 +17,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"strconv"
+
 	admissionv1 "k8s.io/api/admission/v1"
 	v1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -150,9 +152,9 @@ type Rule struct {
 	Operation OverriderOperator `json:"operation,omitempty"`
 	// +required
 	Path string `json:"path,omitempty"`
-	// Must be empty when operator is Remove.
+	// Value sets exact value for rule, like enum or numbers
 	// +optional
-	Value apiextensionsv1.JSON `json:"value,omitempty"`
+	Value *CustomTypes `json:"value,omitempty"`
 	// +optional
 	ValueRef *ResourceRefer `json:"valueRef,omitempty"`
 	//resource
@@ -203,6 +205,113 @@ type ResourcesOversellRule struct {
 
 // Float64 is alias for float64 as string
 type Float64 string
+
+func (f Float64) ValidFactor() bool {
+	f64, err := strconv.ParseFloat(string(f), 64)
+	if err != nil {
+		return false
+	}
+
+	return f64 > 0 && f64 < 1
+}
+
+// ToFloat64 converts string to pointer to float64 and return nil if convert got error
+func (f Float64) ToFloat64() *float64 {
+	f64, err := strconv.ParseFloat(string(f), 64)
+	if err != nil {
+		return nil
+	}
+
+	return &f64
+}
+
+// CustomTypes defines exact types. Only one of field can be set.
+type CustomTypes struct {
+	// +optional
+	String *string `json:"string,omitempty"`
+	// +optional
+	Integer *int64 `json:"integer,omitempty"`
+	// +optional
+	Float *Float64 `json:"float,omitempty"`
+	// +optional
+	Boolean *bool `json:"boolean,omitempty"`
+	// +optional
+	StringSlice []string `json:"stringSlice,omitempty"`
+	// +optional
+	IntegerSlice []int64 `json:"integerSlice,omitempty"`
+	// +optional
+	FloatSlice []Float64 `json:"floatSlice,omitempty"`
+}
+
+// Value return first non-nil value, it returns nil if all fields are empty.
+func (t *CustomTypes) Value() any {
+	if t == nil {
+		return nil
+	}
+
+	if t.String != nil {
+		return *t.String
+	}
+
+	if t.Integer != nil {
+		return *t.Integer
+	}
+
+	if t.Float != nil {
+		return *t.Float
+	}
+
+	if t.Boolean != nil {
+		return *t.Boolean
+	}
+
+	if len(t.StringSlice) > 0 {
+		return t.StringSlice
+	}
+
+	if len(t.IntegerSlice) > 0 {
+		return t.IntegerSlice
+	}
+
+	if len(t.FloatSlice) > 0 {
+		return t.FloatSlice
+	}
+
+	return nil
+}
+
+func (t *CustomTypes) GetSlice() []any {
+	if t == nil {
+		return nil
+	}
+
+	var result []any
+	if len(t.StringSlice) > 0 {
+		for _, s := range t.StringSlice {
+			result = append(result, s)
+		}
+
+		return result
+	}
+
+	if len(t.IntegerSlice) > 0 {
+		for _, s := range t.IntegerSlice {
+			result = append(result, s)
+		}
+
+		return result
+	}
+
+	if len(t.FloatSlice) > 0 {
+		for _, s := range t.FloatSlice {
+			result = append(result, s)
+		}
+
+		return result
+	}
+
+	return nil
+}
 
 // PlaintextOverrider is a simple overrider that overrides target fields
 // according to path, operator and value.

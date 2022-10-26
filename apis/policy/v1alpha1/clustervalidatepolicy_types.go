@@ -18,7 +18,6 @@ package v1alpha1
 
 import (
 	admissionv1 "k8s.io/api/admission/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -82,7 +81,7 @@ type ValidateCondition struct {
 	// +required
 	Message string `json:"message,omitempty"`
 	// +optional
-	Value apiextensionsv1.JSON `json:"value,omitempty"`
+	Value *CustomTypes `json:"value,omitempty"`
 	// +optional
 	ValueRef *ResourceRefer `json:"valueRef,omitempty"`
 	// +optional

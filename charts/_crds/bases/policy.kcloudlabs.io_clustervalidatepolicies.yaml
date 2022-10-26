@@ -233,7 +233,34 @@ spec:
                           message:
                             type: string
                           value:
-                            x-kubernetes-preserve-unknown-fields: true
+                            description: CustomTypes defines exact types. Only one
+                              of field can be set.
+                            properties:
+                              boolean:
+                                type: boolean
+                              float:
+                                description: Float64 is alias for float64 as string
+                                type: string
+                              floatSlice:
+                                items:
+                                  description: Float64 is alias for float64 as string
+                                  type: string
+                                type: array
+                              integer:
+                                format: int64
+                                type: integer
+                              integerSlice:
+                                items:
+                                  format: int64
+                                  type: integer
+                                type: array
+                              string:
+                                type: string
+                              stringSlice:
+                                items:
+                                  type: string
+                                type: array
+                            type: object
                           valueRef:
                             description: ResourceRefer defines different types of
                               ref data

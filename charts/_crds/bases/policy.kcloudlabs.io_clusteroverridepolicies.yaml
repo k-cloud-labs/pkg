@@ -1253,8 +1253,35 @@ spec:
                                 - tolerations
                                 type: string
                               value:
-                                description: Must be empty when operator is Remove.
-                                x-kubernetes-preserve-unknown-fields: true
+                                description: Value sets exact value for rule, like
+                                  enum or numbers
+                                properties:
+                                  boolean:
+                                    type: boolean
+                                  float:
+                                    description: Float64 is alias for float64 as string
+                                    type: string
+                                  floatSlice:
+                                    items:
+                                      description: Float64 is alias for float64 as
+                                        string
+                                      type: string
+                                    type: array
+                                  integer:
+                                    format: int64
+                                    type: integer
+                                  integerSlice:
+                                    items:
+                                      format: int64
+                                      type: integer
+                                    type: array
+                                  string:
+                                    type: string
+                                  stringSlice:
+                                    items:
+                                      type: string
+                                    type: array
+                                type: object
                               valueRef:
                                 description: ResourceRefer defines different types
                                   of ref data
