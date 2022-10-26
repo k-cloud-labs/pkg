@@ -3,6 +3,7 @@ package templatemanager
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/build"
@@ -27,11 +28,15 @@ type CueManager interface {
 	Exec(src []byte, data any, parsePath string, output any) error
 }
 
-type cueManagerImpl struct{}
+type cueManagerImpl struct {
+	debug bool
+}
 
 // NewCueManager init a new CueManager
 func NewCueManager() CueManager {
-	return &cueManagerImpl{}
+	return &cueManagerImpl{
+		debug: true,
+	}
 }
 
 func (c *cueManagerImpl) Format(src []byte, opts ...format.Option) (result []byte, err error) {
@@ -41,6 +46,9 @@ func (c *cueManagerImpl) Format(src []byte, opts ...format.Option) (result []byt
 			format.UseSpaces(4),
 			format.TabIndent(false),
 		}
+	}
+	if c.debug {
+		log.Println("before format:", string(src))
 	}
 	res, err := format.Source(src, formatOptions...)
 	if err != nil {

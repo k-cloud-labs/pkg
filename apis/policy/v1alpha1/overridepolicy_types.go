@@ -93,7 +93,7 @@ type Overriders struct {
 	// it will be rendered to CUE and store in RenderedCue field, so
 	//if there are any data added manually will be erased.
 	// +optional
-	Rules []Rule `json:"rules,omitempty"`
+	Rules []*Rule `json:"rules,omitempty"`
 
 	// RenderedCue represents override rules defined by Rules.
 	// Don't modify the value of this field, modify Rules instead of.
@@ -102,19 +102,32 @@ type Overriders struct {
 }
 
 // RuleType is definition for type of single rule
+// +kubebuilder:validation:Enum=annotations;labels;resourcesOversell;resources;affinity;tolerations
 type RuleType string
 
 // The valid RuleTypes
 const (
-	RuleTypeAnnotations      RuleType = "annotations"
-	RuleTypeLabels           RuleType = "labels"
-	RuleTypeResourceOversell RuleType = "resourceOversell"
-	RuleTypeResource         RuleType = "resource"
-	RuleTypeAffinity         RuleType = "affinity"
-	RuleTypeTolerations      RuleType = "tolerations"
+	RuleTypeAnnotations       RuleType = "annotations"
+	RuleTypeLabels            RuleType = "labels"
+	RuleTypeResourcesOversell RuleType = "resourcesOversell"
+	RuleTypeResources         RuleType = "resources"
+	RuleTypeAffinity          RuleType = "affinity"
+	RuleTypeTolerations       RuleType = "tolerations"
+)
+
+// ValueType defines whether value is specified by user or refer from other object
+// +kubebuilder:validation:Enum=const;ref
+type ValueType string
+
+const (
+	// ValueTypeConst means value is specified exactly.
+	ValueTypeConst ValueType = "const"
+	// ValueTypeRefer means value is refer from other object
+	ValueTypeRefer ValueType = "ref"
 )
 
 // ValueRefFrom defines where the override value comes from when value is refer other object or http response
+// +kubebuilder:validation:Enum=current;old;k8s;http
 type ValueRefFrom string
 
 // Valid ValueRefFrom
@@ -122,7 +135,7 @@ const (
 	// FromCurrentObject means read data from current k8s object(the newest one when update operate intercept)
 	FromCurrentObject ValueRefFrom = "current"
 	// FromOldObject means read data from old object, only used when object be updated
-	FromOldObject ValueRefFrom = "current"
+	FromOldObject ValueRefFrom = "old"
 	// FromK8s - read data from other object in current kubernetes
 	FromK8s ValueRefFrom = "k8s"
 	// FromHTTP - read data from http response
@@ -135,24 +148,24 @@ type Rule struct {
 	Operation OverriderOperator `json:"operation,omitempty"`
 	Path      string            `json:"path,omitempty"`
 	Value     any               `json:"value,omitempty"`
-	ValueRef  *ValueRef         `json:"valueRef,omitempty"`
+	ValueRef  *ResourceRefer    `json:"valueRef,omitempty"`
 
 	//resource
-	Resource *v1.ResourceRequirements `json:"resource,omitempty"`
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 	// resource oversell
-	ResourceOversell *ResourceOversellRule `json:"resourceOversell,omitempty"`
+	ResourcesOversell *ResourcesOversellRule `json:"resourcesOversell,omitempty"`
 	// toleration
 	Tolerations []*v1.Toleration `json:"tolerations,omitempty"`
 	// affinity
 	Affinity *v1.Affinity `json:"affinity,omitempty"`
 }
 
-// ValueRef defines different types of ref data
-type ValueRef struct {
-	From ValueRefFrom `json:"from"`
+// ResourceRefer defines different types of ref data
+type ResourceRefer struct {
+	From ValueRefFrom `json:"from,omitempty"`
 	// Path has different meaning, it represents current object field path like "/spec/replica" when From equals "own"
 	// and it also can be format like "data.result.x.y" when From equals "http", it represents the path in http response
-	Path string `json:"path"`
+	Path string `json:"path,omitempty"`
 	// ref k8s resource
 	*ResourceSelector `json:",inline"`
 	// ref http response
@@ -166,8 +179,8 @@ type HttpDataRef struct {
 	Params map[string]string `json:"params,omitempty"`
 }
 
-// ResourceOversellRule defines factor of resource oversell
-type ResourceOversellRule struct {
+// ResourcesOversellRule defines factor of resource oversell
+type ResourcesOversellRule struct {
 	CpuFactor    float64 `json:"cpuFactor,omitempty"`
 	MemoryFactor float64 `json:"memoryFactor,omitempty"`
 	DiskFactor   float64 `json:"diskFactor,omitempty"`

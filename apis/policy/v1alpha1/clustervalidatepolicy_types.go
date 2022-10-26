@@ -44,6 +44,42 @@ type ValidateRuleWithOperation struct {
 	// Cue represents validate rules defined with cue code.
 	// +required
 	Cue string `json:"cue"`
+
+	// Conditions is a list of condition which defines validate cond, and
+	// it will be rendered to CUE and store in RenderedCue field, so
+	//if there are any data added manually will be erased.
+	// +optional
+	Conditions []*ValidateCondition `json:"conditions,omitempty"`
+
+	// RenderedCue represents override rules defined by Rules.
+	// Don't modify the value of this field, modify Rules instead of.
+	// +optional
+	RenderedCue string `json:"renderedCue,omitempty"`
+}
+
+// Cond is validation condition for validator
+type Cond string
+
+const (
+	CondEqual          = "Equal"
+	CondNotEqual       = "NotEqual"
+	CondExist          = "Exist"
+	CondNotExist       = "NotExist"
+	CondIn             = "In"
+	CondNotIn          = "NotIn"
+	CondGreater        = "Gt"
+	CondGreaterOrEqual = "Gte"
+	CondLesser         = "Lt"
+	CondLesserOrEqual  = "Lte"
+)
+
+type ValidateCondition struct {
+	Cond     Cond                 `json:"cond,omitempty"`
+	Value    any                  `json:"value,omitempty"`
+	ValueRef *ResourceRefer       `json:"valueRef,omitempty"`
+	DataRef  *ResourceRefer       `json:"dataRef,omitempty"`
+	Message  string               `json:"message,omitempty"`
+	And      []*ValidateCondition `json:"and,omitempty"` // can add and conditions
 }
 
 // +genclient
