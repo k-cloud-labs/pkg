@@ -144,19 +144,28 @@ const (
 
 // Rule represents a single rule definition
 type Rule struct {
-	Type      RuleType          `json:"type,omitempty"`
+	// +required
+	Type RuleType `json:"type,omitempty"`
+	// +required
 	Operation OverriderOperator `json:"operation,omitempty"`
-	Path      string            `json:"path,omitempty"`
-	Value     any               `json:"value,omitempty"`
-	ValueRef  *ResourceRefer    `json:"valueRef,omitempty"`
-
+	// +required
+	Path string `json:"path,omitempty"`
+	// Must be empty when operator is Remove.
+	// +optional
+	Value apiextensionsv1.JSON `json:"value,omitempty"`
+	// +optional
+	ValueRef *ResourceRefer `json:"valueRef,omitempty"`
 	//resource
+	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 	// resource oversell
+	// +optional
 	ResourcesOversell *ResourcesOversellRule `json:"resourcesOversell,omitempty"`
 	// toleration
+	// +optional
 	Tolerations []*v1.Toleration `json:"tolerations,omitempty"`
 	// affinity
+	// +optional
 	Affinity *v1.Affinity `json:"affinity,omitempty"`
 }
 
@@ -181,10 +190,19 @@ type HttpDataRef struct {
 
 // ResourcesOversellRule defines factor of resource oversell
 type ResourcesOversellRule struct {
-	CpuFactor    float64 `json:"cpuFactor,omitempty"`
-	MemoryFactor float64 `json:"memoryFactor,omitempty"`
-	DiskFactor   float64 `json:"diskFactor,omitempty"`
+	// CpuFactor factor of cup oversell, it is float number less than 1, the range of value is (0,1.0)
+	// +optional
+	CpuFactor Float64 `json:"cpuFactor,omitempty"`
+	// MemoryFactor factor of cup oversell, it is float number less than 1, the range of value is (0,1.0)
+	// +optional
+	MemoryFactor Float64 `json:"memoryFactor,omitempty"`
+	// DiskFactor factor of cup oversell, it is float number less than 1, the range of value is (0,1.0)
+	// +optional
+	DiskFactor Float64 `json:"diskFactor,omitempty"`
 }
+
+// Float64 is alias for float64 as string
+type Float64 string
 
 // PlaintextOverrider is a simple overrider that overrides target fields
 // according to path, operator and value.

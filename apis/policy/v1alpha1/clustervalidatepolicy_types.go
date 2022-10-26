@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	admissionv1 "k8s.io/api/admission/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -74,12 +75,18 @@ const (
 )
 
 type ValidateCondition struct {
-	Cond     Cond                 `json:"cond,omitempty"`
-	Value    any                  `json:"value,omitempty"`
-	ValueRef *ResourceRefer       `json:"valueRef,omitempty"`
-	DataRef  *ResourceRefer       `json:"dataRef,omitempty"`
-	Message  string               `json:"message,omitempty"`
-	And      []*ValidateCondition `json:"and,omitempty"` // can add and conditions
+	// +required
+	Cond Cond `json:"cond,omitempty"`
+	// +required
+	DataRef *ResourceRefer `json:"dataRef,omitempty"`
+	// +required
+	Message string `json:"message,omitempty"`
+	// +optional
+	Value apiextensionsv1.JSON `json:"value,omitempty"`
+	// +optional
+	ValueRef *ResourceRefer `json:"valueRef,omitempty"`
+	// +optional
+	And []*ValidateCondition `json:"and,omitempty"` // can add and conditions
 }
 
 // +genclient
