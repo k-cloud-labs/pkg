@@ -23,9 +23,9 @@ type CueManager interface {
 	Validate(src []byte, data any, opts ...cue.Option) error
 	// DryRun - calculate/render cue with given data.
 	// Same as running `cue eval xxx.cue`
-	DryRun(src []byte, data any) (result []byte, err error)
+	DryRun(src []byte, data any, outputField string) (result []byte, err error)
 	// Exec -  execute cue with given data
-	Exec(src []byte, data any, parsePath string, output any) error
+	Exec(src []byte, data any, outputField string, output any) error
 }
 
 type cueManagerImpl struct {
@@ -110,7 +110,7 @@ func (c *cueManagerImpl) Validate(src []byte, data any, opts ...cue.Option) erro
 	return err
 }
 
-func (c *cueManagerImpl) DryRun(src []byte, data any) (result []byte, err error) {
+func (c *cueManagerImpl) DryRun(src []byte, data any, outputField string) (result []byte, err error) {
 	bi := build.NewContext().NewInstance("", nil)
 	// add template
 	fs, err := parser.ParseFile("-", src, parser.ParseComments)
@@ -144,11 +144,16 @@ func (c *cueManagerImpl) DryRun(src []byte, data any) (result []byte, err error)
 	if value.Err() != nil {
 		return nil, value.Err()
 	}
+	// 2. generate result
+	value = value.LookupPath(cue.ParsePath(outputField))
+	if !value.Exists() {
+		return nil, value.Err()
+	}
 
-	return value.Bytes()
+	return value.MarshalJSON()
 }
 
-func (c *cueManagerImpl) Exec(src []byte, data any, parsePath string, output any) error {
+func (c *cueManagerImpl) Exec(src []byte, data any, outputField string, output any) error {
 	bi := build.NewContext().NewInstance("", nil)
 	// add template
 	fs, err := parser.ParseFile("-", src, parser.ParseComments)
@@ -186,7 +191,7 @@ func (c *cueManagerImpl) Exec(src []byte, data any, parsePath string, output any
 	}
 
 	// 2. generate result
-	value = value.LookupPath(cue.ParsePath(parsePath))
+	value = value.LookupPath(cue.ParsePath(outputField))
 	if !value.Exists() {
 		return value.Err()
 	}
