@@ -24,7 +24,7 @@ type TemplateSource struct {
 	// example: xx/xxx/*.tmpl
 	PathPattern string
 	// example: xx/xx/yy.tmpl
-	FileName string
+	FilePath string
 	// also can set template content via this field
 	Content string
 	// TemplateName name of template, if using multi defined template then must specify template name.
@@ -36,7 +36,7 @@ func (ts *TemplateSource) validate() error {
 		return errors.New("must provide template source")
 	}
 
-	if len(ts.PathPattern) == 0 && len(ts.FileName) == 0 && len(ts.Content) == 0 {
+	if len(ts.PathPattern) == 0 && len(ts.FilePath) == 0 && len(ts.Content) == 0 {
 		return errors.New("must provide one of template source")
 	}
 
@@ -52,8 +52,8 @@ func (ts *TemplateSource) parse(t1 *template.Template) (t *template.Template, er
 		return t1.ParseGlob(ts.PathPattern)
 	}
 
-	if len(ts.FileName) > 0 {
-		return t1.ParseFiles(ts.FileName)
+	if len(ts.FilePath) > 0 {
+		return t1.ParseFiles(ts.FilePath)
 	}
 
 	return t1.Parse(ts.Content)
