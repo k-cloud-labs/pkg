@@ -90,7 +90,7 @@ validate: {
 	defer ctrl.Finish()
 
 	cvpLister := mock.NewMockClusterValidatePolicyLister(ctrl)
-	m := NewValidateManager(cvpLister)
+	m := NewValidateManager(nil, cvpLister)
 
 	cvpLister.EXPECT().List(labels.Everything()).Return([]*policyv1alpha1.ClusterValidatePolicy{
 		validatePolicy1,

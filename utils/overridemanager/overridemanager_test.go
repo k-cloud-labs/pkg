@@ -270,7 +270,7 @@ patches: [{
 
 	opLister := mock.NewMockOverridePolicyLister(ctrl)
 	copLister := mock.NewMockClusterOverridePolicyLister(ctrl)
-	m := NewOverrideManager(copLister, opLister)
+	m := NewOverrideManager(nil, copLister, opLister)
 
 	opLister.EXPECT().List(labels.Everything()).Return([]*policyv1alpha1.OverridePolicy{
 		overridePolicy1,
@@ -286,6 +286,7 @@ patches: [{
 		opLister          v1alpha10.OverridePolicyLister
 		copLister         v1alpha10.ClusterOverridePolicyLister
 		resource          *unstructured.Unstructured
+		oldResource       *unstructured.Unstructured
 		operation         admissionv1.Operation
 		wantedCOPs        *AppliedOverrides
 		wantedOPs         *AppliedOverrides
@@ -328,7 +329,7 @@ patches: [{
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if cops, ops, err := m.ApplyOverridePolicies(tt.resource, tt.operation); !reflect.DeepEqual(cops, tt.wantedCOPs) || !reflect.DeepEqual(ops, tt.wantedOPs) ||
+			if cops, ops, err := m.ApplyOverridePolicies(tt.resource, tt.oldResource, tt.operation); !reflect.DeepEqual(cops, tt.wantedCOPs) || !reflect.DeepEqual(ops, tt.wantedOPs) ||
 				!reflect.DeepEqual(tt.resource.GetAnnotations(), tt.wantedAnnotations) || !reflect.DeepEqual(err, tt.wantedErr) {
 				t.Errorf("ApplyOverridePolicies() = %v, %v, %v, want %v, %v, %v", cops, ops, err, tt.wantedCOPs, tt.wantedOPs, tt.wantedErr)
 			}
