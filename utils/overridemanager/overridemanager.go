@@ -9,6 +9,7 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/klog/v2"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
@@ -53,8 +54,9 @@ type policyOverriders struct {
 }
 
 type overrideManagerImpl struct {
-	opLister  v1alpha1.OverridePolicyLister
-	copLister v1alpha1.ClusterOverridePolicyLister
+	dynamicClient dynamic.Interface
+	opLister      v1alpha1.OverridePolicyLister
+	copLister     v1alpha1.ClusterOverridePolicyLister
 }
 
 func NewOverrideManager(copLister v1alpha1.ClusterOverridePolicyLister, opLister v1alpha1.OverridePolicyLister) OverrideManager {
@@ -113,7 +115,7 @@ func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj *unstructured.
 
 	appliedOverrides := &AppliedOverrides{}
 	for _, p := range matchingPolicyOverriders {
-		if err := applyPolicyOverriders(rawObj, p.overriders); err != nil {
+		if err := o.applyPolicyOverriders(rawObj, p.overriders); err != nil {
 			klog.ErrorS(err, "Failed to apply cluster overriders.", "clusteroverridepolicy", p.name, "resource", klog.KObj(rawObj), "operation", operation)
 			return nil, err
 		}
@@ -148,7 +150,7 @@ func (o *overrideManagerImpl) applyOverridePolicies(rawObj *unstructured.Unstruc
 
 	appliedOverriders := &AppliedOverrides{}
 	for _, p := range matchingPolicyOverriders {
-		if err := applyPolicyOverriders(rawObj, p.overriders); err != nil {
+		if err := o.applyPolicyOverriders(rawObj, p.overriders); err != nil {
 			klog.ErrorS(err, "Failed to apply overriders.", "overridepolicy", fmt.Sprintf("%s/%s", p.namespace, p.name), "resource", klog.KObj(rawObj), "operation", operation)
 			return nil, err
 		}
@@ -195,7 +197,7 @@ func (o *overrideManagerImpl) getOverridersFromOverridePolicies(policies []Gener
 }
 
 // applyPolicyOverriders applies OverridePolicy/ClusterOverridePolicy overriders to target object
-func applyPolicyOverriders(rawObj *unstructured.Unstructured, overriders policyv1alpha1.Overriders) error {
+func (o *overrideManagerImpl) applyPolicyOverriders(rawObj *unstructured.Unstructured, overriders policyv1alpha1.Overriders) error {
 	if overriders.Cue != "" {
 		patches, err := executeCue(rawObj, overriders.Cue)
 		if err != nil {

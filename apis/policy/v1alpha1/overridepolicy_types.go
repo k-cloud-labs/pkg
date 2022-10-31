@@ -91,13 +91,13 @@ type Overriders struct {
 	// +optional
 	Cue string `json:"cue,omitempty"`
 
-	// Rules is a list of rule which defines override rule, and
+	// Template of rule which defines override rule, and
 	// it will be rendered to CUE and store in RenderedCue field, so
 	//if there are any data added manually will be erased.
 	// +optional
-	Rules []*Rule `json:"rules,omitempty"`
+	Template *TemplateRule `json:"template,omitempty"`
 
-	// RenderedCue represents override rules defined by Rules.
+	// RenderedCue represents override rule defined by Template.
 	// Don't modify the value of this field, modify Rules instead of.
 	// +optional
 	RenderedCue string `json:"renderedCue,omitempty"`
@@ -144,8 +144,8 @@ const (
 	FromHTTP ValueRefFrom = "http"
 )
 
-// Rule represents a single rule definition
-type Rule struct {
+// TemplateRule represents a single template of rule definition
+type TemplateRule struct {
 	// +required
 	Type RuleType `json:"type,omitempty"`
 	// +required
