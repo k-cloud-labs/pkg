@@ -31,7 +31,7 @@ func BuildCueParamsViaOverridePolicy(c dynamic.Interface, overriders *v1alpha1.O
 	)
 	if rule.ValueRef != nil {
 		if rule.ValueRef.From == v1alpha1.FromK8s {
-			obj, err := getObject(c, rule.ValueRef.ResourceSelector)
+			obj, err := getObject(c, rule.ValueRef.K8s)
 			if err != nil {
 				return nil, err
 			}
@@ -39,7 +39,7 @@ func BuildCueParamsViaOverridePolicy(c dynamic.Interface, overriders *v1alpha1.O
 		}
 
 		if rule.ValueRef.From == v1alpha1.FromHTTP {
-			obj, err := getHttpResponse(nil, rule.ValueRef.HttpDataRef)
+			obj, err := getHttpResponse(nil, rule.ValueRef.Http)
 			if err != nil {
 				return nil, err
 			}
@@ -57,7 +57,7 @@ func BuildCueParamsViaValidatePolicy(c dynamic.Interface, condition *v1alpha1.Te
 
 	if condition.ValueRef != nil {
 		if condition.ValueRef.From == v1alpha1.FromK8s {
-			obj, err := getObject(c, condition.ValueRef.ResourceSelector)
+			obj, err := getObject(c, condition.ValueRef.K8s)
 			if err != nil {
 				return nil, err
 			}
@@ -65,7 +65,7 @@ func BuildCueParamsViaValidatePolicy(c dynamic.Interface, condition *v1alpha1.Te
 		}
 
 		if condition.ValueRef.From == v1alpha1.FromHTTP {
-			obj, err := getHttpResponse(nil, condition.ValueRef.HttpDataRef)
+			obj, err := getHttpResponse(nil, condition.ValueRef.Http)
 			if err != nil {
 				return nil, err
 			}
@@ -75,7 +75,7 @@ func BuildCueParamsViaValidatePolicy(c dynamic.Interface, condition *v1alpha1.Te
 
 	if condition.DataRef != nil {
 		if condition.DataRef.From == v1alpha1.FromK8s {
-			obj, err := getObject(c, condition.DataRef.ResourceSelector)
+			obj, err := getObject(c, condition.DataRef.K8s)
 			if err != nil {
 				return nil, err
 			}
@@ -84,7 +84,7 @@ func BuildCueParamsViaValidatePolicy(c dynamic.Interface, condition *v1alpha1.Te
 		}
 
 		if condition.DataRef.From == v1alpha1.FromHTTP {
-			obj, err := getHttpResponse(nil, condition.DataRef.HttpDataRef)
+			obj, err := getHttpResponse(nil, condition.DataRef.Http)
 			if err != nil {
 				return nil, err
 			}

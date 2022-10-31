@@ -173,14 +173,15 @@ type TemplateRule struct {
 
 // ResourceRefer defines different types of ref data
 type ResourceRefer struct {
+	// +required
 	From ValueRefFrom `json:"from,omitempty"`
 	// Path has different meaning, it represents current object field path like "/spec/replica" when From equals "own"
 	// and it also can be format like "data.result.x.y" when From equals "http", it represents the path in http response
 	Path string `json:"path,omitempty"`
 	// ref k8s resource
-	*ResourceSelector `json:",inline"`
+	K8s *ResourceSelector `json:"k8s,omitempty"`
 	// ref http response
-	*HttpDataRef `json:",inline"`
+	Http *HttpDataRef `json:"http,omitempty"`
 }
 
 // HttpDataRef defines a http request essential params
