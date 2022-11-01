@@ -398,8 +398,6 @@ spec:
                               type: string
                           type: object
                       type: object
-                  required:
-                  - cue
                   type: object
                 type: array
             required:

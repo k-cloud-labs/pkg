@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
-	"github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
+	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 )
 
 type CueParams struct {
@@ -22,7 +22,7 @@ type CueParams struct {
 	ExtraParams map[string]any
 }
 
-func BuildCueParamsViaOverridePolicy(c dynamic.Interface, overriders *v1alpha1.Overriders) (*CueParams, error) {
+func BuildCueParamsViaOverridePolicy(c dynamic.Interface, overriders *policyv1alpha1.Overriders) (*CueParams, error) {
 	var (
 		cp = &CueParams{
 			ExtraParams: make(map[string]any),
@@ -30,7 +30,7 @@ func BuildCueParamsViaOverridePolicy(c dynamic.Interface, overriders *v1alpha1.O
 		rule = overriders.Template
 	)
 	if rule.ValueRef != nil {
-		if rule.ValueRef.From == v1alpha1.FromK8s {
+		if rule.ValueRef.From == policyv1alpha1.FromK8s {
 			obj, err := getObject(c, rule.ValueRef.K8s)
 			if err != nil {
 				return nil, err
@@ -38,7 +38,7 @@ func BuildCueParamsViaOverridePolicy(c dynamic.Interface, overriders *v1alpha1.O
 			cp.ExtraParams["otherObject"] = obj
 		}
 
-		if rule.ValueRef.From == v1alpha1.FromHTTP {
+		if rule.ValueRef.From == policyv1alpha1.FromHTTP {
 			obj, err := getHttpResponse(nil, rule.ValueRef.Http)
 			if err != nil {
 				return nil, err
@@ -50,13 +50,13 @@ func BuildCueParamsViaOverridePolicy(c dynamic.Interface, overriders *v1alpha1.O
 	return cp, nil
 }
 
-func BuildCueParamsViaValidatePolicy(c dynamic.Interface, condition *v1alpha1.TemplateCondition) (*CueParams, error) {
+func BuildCueParamsViaValidatePolicy(c dynamic.Interface, condition *policyv1alpha1.TemplateCondition) (*CueParams, error) {
 	var cp = &CueParams{
 		ExtraParams: make(map[string]any),
 	}
 
 	if condition.ValueRef != nil {
-		if condition.ValueRef.From == v1alpha1.FromK8s {
+		if condition.ValueRef.From == policyv1alpha1.FromK8s {
 			obj, err := getObject(c, condition.ValueRef.K8s)
 			if err != nil {
 				return nil, err
@@ -64,7 +64,7 @@ func BuildCueParamsViaValidatePolicy(c dynamic.Interface, condition *v1alpha1.Te
 			cp.ExtraParams["otherObject"] = obj
 		}
 
-		if condition.ValueRef.From == v1alpha1.FromHTTP {
+		if condition.ValueRef.From == policyv1alpha1.FromHTTP {
 			obj, err := getHttpResponse(nil, condition.ValueRef.Http)
 			if err != nil {
 				return nil, err
@@ -74,7 +74,7 @@ func BuildCueParamsViaValidatePolicy(c dynamic.Interface, condition *v1alpha1.Te
 	}
 
 	if condition.DataRef != nil {
-		if condition.DataRef.From == v1alpha1.FromK8s {
+		if condition.DataRef.From == policyv1alpha1.FromK8s {
 			obj, err := getObject(c, condition.DataRef.K8s)
 			if err != nil {
 				return nil, err
@@ -83,7 +83,7 @@ func BuildCueParamsViaValidatePolicy(c dynamic.Interface, condition *v1alpha1.Te
 			cp.ExtraParams["otherObject_d"] = obj
 		}
 
-		if condition.DataRef.From == v1alpha1.FromHTTP {
+		if condition.DataRef.From == policyv1alpha1.FromHTTP {
 			obj, err := getHttpResponse(nil, condition.DataRef.Http)
 			if err != nil {
 				return nil, err
@@ -95,7 +95,7 @@ func BuildCueParamsViaValidatePolicy(c dynamic.Interface, condition *v1alpha1.Te
 	return cp, nil
 }
 
-func getObject(c dynamic.Interface, rs *v1alpha1.ResourceSelector) (*unstructured.Unstructured, error) {
+func getObject(c dynamic.Interface, rs *policyv1alpha1.ResourceSelector) (*unstructured.Unstructured, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	gvk := schema.GroupVersionResource{
@@ -134,7 +134,7 @@ func getObject(c dynamic.Interface, rs *v1alpha1.ResourceSelector) (*unstructure
 	return nil, nil
 }
 
-func getHttpResponse(c *http.Client, ref *v1alpha1.HttpDataRef) (map[string]any, error) {
+func getHttpResponse(c *http.Client, ref *policyv1alpha1.HttpDataRef) (map[string]any, error) {
 	if c == nil {
 		c = &http.Client{
 			Transport: http.DefaultTransport,

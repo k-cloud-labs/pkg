@@ -42,7 +42,7 @@ type ValidateRuleWithOperation struct {
 	TargetOperations []admissionv1.Operation `json:"targetOperations,omitempty"`
 
 	// Cue represents validate rules defined with cue code.
-	// +required
+	// +optional
 	Cue string `json:"cue"`
 
 	// Template of condition which defines validate cond, and
