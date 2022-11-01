@@ -12,7 +12,8 @@ cd "${REPO_ROOT}"
 source "hack/util.sh"
 
 util::install_tools ${GOLANGCI_LINT_PKG} ${GOLANGCI_LINT_VER}
-
+# before
+go mod tidy
 if golangci-lint run --timeout=5m; then
   echo 'Congratulations!  All Go source files have passed staticcheck.'
 else

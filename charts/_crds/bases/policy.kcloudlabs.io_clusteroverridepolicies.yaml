@@ -93,7 +93,7 @@ spec:
                             erased.
                           properties:
                             affinity:
-                              description: affinity
+                              description: Affinity valid only when the type is `affinity`
                               properties:
                                 nodeAffinity:
                                   description: Describes node affinity scheduling
@@ -1090,13 +1090,21 @@ spec:
                                   type: object
                               type: object
                             operation:
-                              description: OverriderOperator is the set of operators
-                                that can be used in an overrider.
+                              description: Operation represents current operation
+                                type.
+                              enum:
+                              - add
+                              - replace
+                              - remove
                               type: string
                             path:
+                              description: Path is field path of current object(e.g.
+                                `/spec/affinity`) If current type is annotations of
+                                labels, then only need to provide the key, no need
+                                whole path.
                               type: string
                             resources:
-                              description: resource
+                              description: Resources valid only when the type is `resources`
                               properties:
                                 limits:
                                   additionalProperties:
@@ -1123,7 +1131,8 @@ spec:
                                   type: object
                               type: object
                             resourcesOversell:
-                              description: resource oversell
+                              description: ResourcesOversell valid only when the type
+                                is `resourcesOversell`
                               properties:
                                 cpuFactor:
                                   description: CpuFactor factor of cup oversell, it
@@ -1142,7 +1151,8 @@ spec:
                                   type: string
                               type: object
                             tolerations:
-                              description: toleration
+                              description: Tolerations valid only when the type is
+                                `tolerations`
                               items:
                                 description: The pod this Toleration is attached to
                                   tolerates any taint that matches the triple <key,value,effect>
@@ -1186,73 +1196,112 @@ spec:
                                 type: object
                               type: array
                             type:
-                              description: RuleType is definition for type of single
-                                rule
-                              enum:
-                              - annotations
-                              - labels
-                              - resourcesOversell
-                              - resources
-                              - affinity
-                              - tolerations
+                              allOf:
+                              - enum:
+                                - annotations
+                                - labels
+                                - resourcesOversell
+                                - resources
+                                - affinity
+                                - tolerations
+                              - enum:
+                                - annotations
+                                - labels
+                                - resources
+                                - resourcesOversell
+                                - tolerations
+                                - affinity
+                              description: Type represents current rule operate field
+                                type.
                               type: string
                             value:
                               description: Value sets exact value for rule, like enum
                                 or numbers
                               properties:
                                 boolean:
+                                  description: Boolean only true or false can be recognized.
                                   type: boolean
                                 float:
-                                  description: Float64 is alias for float64 as string
+                                  description: 'Float as float but use string to store,
+                                    so please provide in comma (e.g. float: "1.2")'
                                   type: string
                                 floatSlice:
+                                  description: FloatSlice as a slice of float but
+                                    using string (e.g. ["1.2", "2.3"])
                                   items:
                                     description: Float64 is alias for float64 as string
                                     type: string
                                   type: array
                                 integer:
+                                  description: Integer as an integer(int64)
                                   format: int64
                                   type: integer
                                 integerSlice:
+                                  description: IntegerSlice as a slice of integer(int64)
+                                    (e.g. [1,2,3])
                                   items:
                                     format: int64
                                     type: integer
                                   type: array
                                 string:
+                                  description: String as a string
                                   type: string
+                                stringMap:
+                                  additionalProperties:
+                                    type: string
+                                  description: StringMap as key-value set and both
+                                    are string.
+                                  type: object
                                 stringSlice:
+                                  description: StringSlice as a slice of string(e.g.
+                                    ["a","b"])
                                   items:
                                     type: string
                                   type: array
                               type: object
                             valueRef:
-                              description: ResourceRefer defines different types of
-                                ref data
+                              description: ValueRef represents for value reference
+                                from current or remote object. Need specify the type
+                                of object and how to get it.
                               properties:
                                 from:
-                                  description: ValueRefFrom defines where the override
-                                    value comes from when value is refer other object
-                                    or http response
-                                  enum:
-                                  - current
-                                  - old
-                                  - k8s
-                                  - http
+                                  allOf:
+                                  - enum:
+                                    - current
+                                    - old
+                                    - k8s
+                                    - owner
+                                    - http
+                                  - enum:
+                                    - current
+                                    - old
+                                    - k8s
+                                    - owner
+                                    - http
+                                  description: From represents where this referenced
+                                    object are.
                                   type: string
                                 http:
-                                  description: ref http response
+                                  description: Http means refer data from remote api.
                                   properties:
                                     method:
+                                      description: Method as basic http method(e.g.
+                                        GET or POST)
                                       type: string
                                     params:
                                       additionalProperties:
                                         type: string
+                                      description: Params represents the query value
+                                        when it's get request and json body when it's
+                                        a post request.
                                       type: object
                                     url:
+                                      description: URL as whole http url
                                       type: string
                                   type: object
                                 k8s:
-                                  description: ref k8s resource
+                                  description: K8s means refer another object from
+                                    current cluster.
                                   properties:
                                     apiVersion:
                                       description: APIVersion represents the API version
@@ -1332,9 +1381,11 @@ spec:
                                 path:
                                   description: Path has different meaning, it represents
                                     current object field path like "/spec/replica"
-                                    when From equals "own" and it also can be format
-                                    like "data.result.x.y" when From equals "http",
-                                    it represents the path in http response
+                                    when From equals "current" and it also can be
+                                    format like "data.result.x.y" when From equals
+                                    "http", it represents the path in http response
+                                    Only when From is owner(means refer current object
+                                    owner), the path can be empty.
                                   type: string
                               type: object
                           type: object

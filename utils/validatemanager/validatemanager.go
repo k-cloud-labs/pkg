@@ -4,12 +4,12 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/klog/v2"
 
 	"github.com/k-cloud-labs/pkg/client/listers/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/utils"
 	"github.com/k-cloud-labs/pkg/utils/cue"
+	"github.com/k-cloud-labs/pkg/utils/dynamicclient"
 	"github.com/k-cloud-labs/pkg/utils/util"
 )
 
@@ -20,7 +20,7 @@ type ValidateManager interface {
 }
 
 type validateManagerImpl struct {
-	dynamicClient dynamic.Interface
+	dynamicClient *dynamicclient.DynamicClient
 	cvpLister     v1alpha1.ClusterValidatePolicyLister
 }
 
@@ -29,7 +29,7 @@ type ValidateResult struct {
 	Valid  bool   `json:"valid"`
 }
 
-func NewValidateManager(dynamicClient dynamic.Interface, cvpLister v1alpha1.ClusterValidatePolicyLister) ValidateManager {
+func NewValidateManager(dynamicClient *dynamicclient.DynamicClient, cvpLister v1alpha1.ClusterValidatePolicyLister) ValidateManager {
 	return &validateManagerImpl{
 		dynamicClient: dynamicClient,
 		cvpLister:     cvpLister,
@@ -59,7 +59,8 @@ func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstruc
 					}
 
 					if rule.Template != nil {
-						p, err := cue.BuildCueParamsViaValidatePolicy(m.dynamicClient, rule.Template)
+						klog.InfoS("template rule")
+						p, err := cue.BuildCueParamsViaValidatePolicy(m.dynamicClient, rawObj, rule.Template)
 						if err != nil {
 							klog.ErrorS(err, "Failed to build validate policy params.",
 								"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
@@ -118,6 +119,7 @@ func executeCueV2(cueStr string, parameters []cue.Parameter) (*ValidateResult, e
 		return nil, err
 	}
 
+	klog.InfoS("v2", "result", result)
 	return &result, nil
 }
 
@@ -140,5 +142,6 @@ func executeCue(rawObj *unstructured.Unstructured, oldObj *unstructured.Unstruct
 		return nil, err
 	}
 
+	klog.InfoS("v1", "result", result)
 	return &result, nil
 }

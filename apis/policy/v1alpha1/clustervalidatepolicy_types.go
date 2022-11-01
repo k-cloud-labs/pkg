@@ -58,30 +58,49 @@ type ValidateRuleWithOperation struct {
 }
 
 // Cond is validation condition for validator
+// +kubebuilder:validation:Enum=Equal;NotEqual;Exist;NotExist;In;NotIn;Gt;Gte;Lt;Lte
 type Cond string
 
 const (
-	CondEqual          = "Equal"
-	CondNotEqual       = "NotEqual"
-	CondExist          = "Exist"
-	CondNotExist       = "NotExist"
-	CondIn             = "In"
-	CondNotIn          = "NotIn"
-	CondGreater        = "Gt"
-	CondGreaterOrEqual = "Gte"
-	CondLesser         = "Lt"
-	CondLesserOrEqual  = "Lte"
+	// CondEqual - `Equal`
+	CondEqual Cond = "Equal"
+	// CondNotEqual - `NotEqual`
+	CondNotEqual Cond = "NotEqual"
+	// CondExist - `Exist`
+	CondExist Cond = "Exist"
+	// CondNotExist - `NotExist`
+	CondNotExist Cond = "NotExist"
+	// CondIn - `In`
+	CondIn Cond = "In"
+	// CondNotIn - `NotIn`
+	CondNotIn Cond = "NotIn"
+	// CondGreater - `Gt`
+	CondGreater Cond = "Gt"
+	// CondGreaterOrEqual - `Gte`
+	CondGreaterOrEqual Cond = "Gte"
+	// CondLesser - `Lt`
+	CondLesser Cond = "Lt"
+	// CondLesserOrEqual - `Lte`
+	CondLesserOrEqual Cond = "Lte"
 )
 
 type TemplateCondition struct {
+	// Cond represents type of condition (e.g. Equal, Exist)
+	// +kubebuilder:validation:Enum=Equal;NotEqual;Exist;NotExist;In;NotIn;Gt;Gte;Lt;Lte
 	// +required
 	Cond Cond `json:"cond,omitempty"`
+	// DataRef represents for data reference from current or remote object.
+	// Need specify the type of object and how to get it.
 	// +required
 	DataRef *ResourceRefer `json:"dataRef,omitempty"`
+	// Message specify reject message when policy hit.
 	// +required
 	Message string `json:"message,omitempty"`
+	// Value sets exact value for rule, like enum or numbers
 	// +optional
 	Value *CustomTypes `json:"value,omitempty"`
+	// ValueRef represents for value reference from current or remote object.
+	// Need specify the type of object and how to get it.
 	// +optional
 	ValueRef *ResourceRefer `json:"valueRef,omitempty"`
 }

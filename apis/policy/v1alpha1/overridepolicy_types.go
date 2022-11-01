@@ -109,12 +109,18 @@ type RuleType string
 
 // The valid RuleTypes
 const (
-	RuleTypeAnnotations       RuleType = "annotations"
-	RuleTypeLabels            RuleType = "labels"
+	// RuleTypeAnnotations - `annotations`
+	RuleTypeAnnotations RuleType = "annotations"
+	// RuleTypeLabels - `labels`
+	RuleTypeLabels RuleType = "labels"
+	// RuleTypeResourcesOversell - `resourcesOversell`
 	RuleTypeResourcesOversell RuleType = "resourcesOversell"
-	RuleTypeResources         RuleType = "resources"
-	RuleTypeAffinity          RuleType = "affinity"
-	RuleTypeTolerations       RuleType = "tolerations"
+	// RuleTypeResources - `resources`
+	RuleTypeResources RuleType = "resources"
+	// RuleTypeAffinity - `affinity`
+	RuleTypeAffinity RuleType = "affinity"
+	// RuleTypeTolerations - `tolerations`
+	RuleTypeTolerations RuleType = "tolerations"
 )
 
 // ValueType defines whether value is specified by user or refer from other object
@@ -129,7 +135,7 @@ const (
 )
 
 // ValueRefFrom defines where the override value comes from when value is refer other object or http response
-// +kubebuilder:validation:Enum=current;old;k8s;http
+// +kubebuilder:validation:Enum=current;old;k8s;owner;http
 type ValueRefFrom string
 
 // Valid ValueRefFrom
@@ -140,54 +146,76 @@ const (
 	FromOldObject ValueRefFrom = "old"
 	// FromK8s - read data from other object in current kubernetes
 	FromK8s ValueRefFrom = "k8s"
+	// FromOwnerReference - load first owner reference from current object
+	FromOwnerReference = "owner"
 	// FromHTTP - read data from http response
 	FromHTTP ValueRefFrom = "http"
 )
 
 // TemplateRule represents a single template of rule definition
 type TemplateRule struct {
+	// Type represents current rule operate field type.
+	// +kubebuilder:validation:Enum=annotations;labels;resources;resourcesOversell;tolerations;affinity
 	// +required
 	Type RuleType `json:"type,omitempty"`
+	// Operation represents current operation type.
+	// +kubebuilder:validation:Enum=add;replace;remove
 	// +required
 	Operation OverriderOperator `json:"operation,omitempty"`
-	// +required
+	// Path is field path of current object(e.g. `/spec/affinity`)
+	// If current type is annotations of labels, then only need to provide the key, no need whole path.
+	// +optional
 	Path string `json:"path,omitempty"`
 	// Value sets exact value for rule, like enum or numbers
 	// +optional
 	Value *CustomTypes `json:"value,omitempty"`
+	// ValueRef represents for value reference from current or remote object.
+	// Need specify the type of object and how to get it.
 	// +optional
 	ValueRef *ResourceRefer `json:"valueRef,omitempty"`
-	//resource
+	// Resources valid only when the type is `resources`
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-	// resource oversell
+	// ResourcesOversell valid only when the type is `resourcesOversell`
 	// +optional
 	ResourcesOversell *ResourcesOversellRule `json:"resourcesOversell,omitempty"`
-	// toleration
+	// Tolerations valid only when the type is `tolerations`
 	// +optional
 	Tolerations []*v1.Toleration `json:"tolerations,omitempty"`
-	// affinity
+	// Affinity valid only when the type is `affinity`
 	// +optional
 	Affinity *v1.Affinity `json:"affinity,omitempty"`
 }
 
 // ResourceRefer defines different types of ref data
 type ResourceRefer struct {
+	// From represents where this referenced object are.
+	// +kubebuilder:validation:Enum=current;old;k8s;owner;http
 	// +required
 	From ValueRefFrom `json:"from,omitempty"`
-	// Path has different meaning, it represents current object field path like "/spec/replica" when From equals "own"
+	// Path has different meaning, it represents current object field path like "/spec/replica" when From equals "current"
 	// and it also can be format like "data.result.x.y" when From equals "http", it represents the path in http response
+	// Only when From is owner(means refer current object owner), the path can be empty.
+	// +optional
 	Path string `json:"path,omitempty"`
-	// ref k8s resource
+	// K8s means refer another object from current cluster.
+	// +optional
 	K8s *ResourceSelector `json:"k8s,omitempty"`
-	// ref http response
+	// Http means refer data from remote api.
+	// +optional
 	Http *HttpDataRef `json:"http,omitempty"`
 }
 
 // HttpDataRef defines a http request essential params
 type HttpDataRef struct {
-	URL    string            `json:"url,omitempty"`
-	Method string            `json:"method,omitempty"`
+	// URL as whole http url
+	// +required
+	URL string `json:"url,omitempty"`
+	// Method as basic http method(e.g. GET or POST)
+	// +required
+	Method string `json:"method,omitempty"`
+	// Params represents the query value when it's get request and json body when it's a post request.
+	// +optional
 	Params map[string]string `json:"params,omitempty"`
 }
 
@@ -228,20 +256,30 @@ func (f Float64) ToFloat64() *float64 {
 
 // CustomTypes defines exact types. Only one of field can be set.
 type CustomTypes struct {
+	// String as a string
 	// +optional
 	String *string `json:"string,omitempty"`
+	// Integer as an integer(int64)
 	// +optional
 	Integer *int64 `json:"integer,omitempty"`
+	// Float as float but use string to store, so please provide in comma (e.g. float: "1.2")
 	// +optional
 	Float *Float64 `json:"float,omitempty"`
+	// Boolean only true or false can be recognized.
 	// +optional
 	Boolean *bool `json:"boolean,omitempty"`
+	// StringSlice as a slice of string(e.g. ["a","b"])
 	// +optional
 	StringSlice []string `json:"stringSlice,omitempty"`
+	// IntegerSlice as a slice of integer(int64) (e.g. [1,2,3])
 	// +optional
 	IntegerSlice []int64 `json:"integerSlice,omitempty"`
+	// FloatSlice as a slice of float but using string (e.g. ["1.2", "2.3"])
 	// +optional
 	FloatSlice []Float64 `json:"floatSlice,omitempty"`
+	// StringMap as key-value set and both are string.
+	// +optional
+	StringMap map[string]string `json:"stringMap,omitempty"`
 }
 
 // Value return first non-nil value, it returns nil if all fields are empty.
@@ -276,6 +314,10 @@ func (t *CustomTypes) Value() any {
 
 	if len(t.FloatSlice) > 0 {
 		return t.FloatSlice
+	}
+
+	if len(t.StringMap) > 0 {
+		return t.StringMap
 	}
 
 	return nil
@@ -334,8 +376,11 @@ type OverriderOperator string
 
 // These are valid overrider operators.
 const (
-	OverriderOpAdd     OverriderOperator = "add"
-	OverriderOpRemove  OverriderOperator = "remove"
+	// OverriderOpAdd - "add" value to object
+	OverriderOpAdd OverriderOperator = "add"
+	// OverriderOpRemove - remove field form object
+	OverriderOpRemove OverriderOperator = "remove"
+	// OverriderOpReplace - remove and add value(if specified path doesn't exist, it will add directly)
 	OverriderOpReplace OverriderOperator = "replace"
 )
 

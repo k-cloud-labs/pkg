@@ -3,7 +3,6 @@ package templatemanager
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/build"
@@ -47,9 +46,7 @@ func (c *cueManagerImpl) Format(src []byte, opts ...format.Option) (result []byt
 			format.TabIndent(false),
 		}
 	}
-	if c.debug {
-		log.Println("before format:", string(src))
-	}
+
 	res, err := format.Source(src, formatOptions...)
 	if err != nil {
 		return nil, err

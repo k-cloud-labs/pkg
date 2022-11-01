@@ -1,6 +1,7 @@
 package overridemanager
 
 import (
+	"flag"
 	"reflect"
 	"testing"
 
@@ -10,11 +11,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/klog/v2"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 	v1alpha10 "github.com/k-cloud-labs/pkg/client/listers/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/test/helper"
 	"github.com/k-cloud-labs/pkg/test/mock"
+	"github.com/k-cloud-labs/pkg/utils"
+	"github.com/k-cloud-labs/pkg/utils/cue"
 	utilhelper "github.com/k-cloud-labs/pkg/utils/util"
 )
 
@@ -208,6 +212,37 @@ patches: [{
 			},
 		},
 	}
+	stringPtr := func(s string) *string {
+		return &s
+	}
+	overriders4 := policyv1alpha1.Overriders{
+		Template: &policyv1alpha1.TemplateRule{
+			Type:      policyv1alpha1.RuleTypeAnnotations,
+			Operation: policyv1alpha1.OverriderOpReplace,
+			Path:      "owned-by",
+			Value:     &policyv1alpha1.CustomTypes{String: stringPtr("template-cue")},
+		},
+		RenderedCue: `
+data:      _ @tag(data)
+object:    data.object
+kind:      object.kind
+patches: [
+    if object.metadata.annotations == _|_ {
+        {
+            op:   "replace"
+            path: "/metadata/annotations"
+            value: {}
+        }
+    },
+    // annotations
+	{
+		op:   "replace"
+		path: "/metadata/annotations/owned-by"
+		value: "template-cue"
+	}
+]
+`,
+	}
 
 	overridePolicy1 := &policyv1alpha1.OverridePolicy{
 		ObjectMeta: metav1.ObjectMeta{
@@ -264,6 +299,28 @@ patches: [{
 			},
 		},
 	}
+	overridePolicy4 := &policyv1alpha1.OverridePolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: metav1.NamespaceDefault,
+			Name:      "overridePolicy4",
+		},
+
+		Spec: policyv1alpha1.OverridePolicySpec{
+			ResourceSelectors: []policyv1alpha1.ResourceSelector{
+				{
+					APIVersion: deployment.APIVersion,
+					Kind:       deployment.Kind,
+					Name:       deployment.Name,
+				},
+			},
+			OverrideRules: []policyv1alpha1.RuleWithOperation{
+				{
+					TargetOperations: []admissionv1.Operation{admissionv1.Create},
+					Overriders:       overriders4,
+				},
+			},
+		},
+	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -275,6 +332,7 @@ patches: [{
 	opLister.EXPECT().List(labels.Everything()).Return([]*policyv1alpha1.OverridePolicy{
 		overridePolicy1,
 		overridePolicy2,
+		overridePolicy4,
 	}, nil).AnyTimes()
 
 	copLister.EXPECT().List(labels.Everything()).Return([]*policyv1alpha1.ClusterOverridePolicy{
@@ -310,6 +368,10 @@ patches: [{
 						PolicyName: overridePolicy2.Name,
 						Overriders: overriders2,
 					},
+					{
+						PolicyName: overridePolicy4.Name,
+						Overriders: overriders4,
+					},
 				},
 			},
 			wantedCOPs: &AppliedOverrides{
@@ -321,9 +383,10 @@ patches: [{
 				},
 			},
 			wantedAnnotations: map[string]string{
-				"aaa": "bbb",
-				"foo": "bar",
-				"cue": "cue",
+				"aaa":      "bbb",
+				"foo":      "bar",
+				"cue":      "cue",
+				"owned-by": "template-cue",
 			},
 		},
 	}
@@ -331,7 +394,99 @@ patches: [{
 		t.Run(tt.name, func(t *testing.T) {
 			if cops, ops, err := m.ApplyOverridePolicies(tt.resource, tt.oldResource, tt.operation); !reflect.DeepEqual(cops, tt.wantedCOPs) || !reflect.DeepEqual(ops, tt.wantedOPs) ||
 				!reflect.DeepEqual(tt.resource.GetAnnotations(), tt.wantedAnnotations) || !reflect.DeepEqual(err, tt.wantedErr) {
-				t.Errorf("ApplyOverridePolicies() = %v, %v, %v, want %v, %v, %v", cops, ops, err, tt.wantedCOPs, tt.wantedOPs, tt.wantedErr)
+				t.Errorf("ApplyOverridePolicies(), cops= %v\n ops=%v\n, err=%v\n, want cops= %v\n ops=%v\n, err=%v", cops, ops, err, tt.wantedCOPs, tt.wantedOPs, tt.wantedErr)
+			}
+		})
+	}
+}
+
+func Test_executeCueV2(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ExitOnError)
+	klog.InitFlags(fs)
+	if err := fs.Parse([]string{"-v", "4"}); err != nil {
+		t.Errorf("parse flag err=%v", err)
+		return
+	}
+
+	type args struct {
+		cueStr     string
+		parameters []cue.Parameter
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    []overrideOption
+		wantErr bool
+	}{
+		{
+			name: "normal",
+			args: args{
+				cueStr: `
+data: _ @tag(data)
+patches: [
+	{
+		op: "add"
+		path: "abc"
+		value: data.object.name
+	}
+]
+				`,
+				parameters: []cue.Parameter{
+					{
+						Name: utils.DataParameterName,
+						Object: map[string]any{
+							"object": map[string]any{
+								"name": "cue",
+							},
+						},
+					},
+				},
+			},
+			want: []overrideOption{
+				{
+					Op:    "add",
+					Path:  "abc",
+					Value: "cue",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "error",
+			args: args{
+				cueStr: `
+data: _ @tag(data)
+patches: [
+	{
+		op: "add"
+		path: "abc"
+		value: data.object.name2
+	}
+]
+				`,
+				parameters: []cue.Parameter{
+					{
+						Name: utils.DataParameterName,
+						Object: map[string]any{
+							"object": map[string]any{
+								"name": "cue",
+							},
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := executeCueV2(tt.args.cueStr, tt.args.parameters)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("executeCueV2() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("executeCueV2() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

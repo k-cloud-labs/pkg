@@ -13,6 +13,8 @@ import (
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/test/helper"
 	"github.com/k-cloud-labs/pkg/test/mock"
+	"github.com/k-cloud-labs/pkg/utils"
+	"github.com/k-cloud-labs/pkg/utils/cue"
 	utilhelper "github.com/k-cloud-labs/pkg/utils/util"
 )
 
@@ -34,7 +36,7 @@ func TestValidateManagerImpl_ApplyValidatePolicies(t *testing.T) {
 object: _ @tag(object)
 
 validate: {
-	valid: object.metadata.name == "ut-validate-policy-success"
+	valid: object.metadata.name != "ut-validate-policy-success"
 }
 `,
 				}}}}
@@ -52,6 +54,30 @@ oldObject: _ @tag(oldObject)
 
 validate: {
 	valid: oldObject.metadata.annotations == _|_ && object.metadata.annotations == _|_
+}
+`,
+				}}}}
+
+	validatePolicy3 := &policyv1alpha1.ClusterValidatePolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "validatepolicy3",
+		},
+		Spec: policyv1alpha1.ClusterValidatePolicySpec{
+			ValidateRules: []policyv1alpha1.ValidateRuleWithOperation{
+				{
+					TargetOperations: []admissionv1.Operation{admissionv1.Delete},
+					Template: &policyv1alpha1.TemplateCondition{
+						Cond:    policyv1alpha1.CondExist,
+						Message: "cannot delete this ns",
+					},
+					RenderedCue: `
+data:      _ @tag(data)
+object:    data.object
+oldObject: data.oldObject
+validate: {
+    if object.metadata.annotations == _|_ {
+        valid:   false
+    }
 }
 `,
 				}}}}
@@ -84,6 +110,16 @@ validate: {
 				Valid: true,
 			},
 		},
+		{
+			name:      "ut-validate-policy-success-delete-rendercue",
+			operation: admissionv1.Delete,
+			object:    podObj,
+			oldObject: nil,
+			wantedErr: nil,
+			wantedResult: &ValidateResult{
+				Valid: false,
+			},
+		},
 	}
 
 	ctrl := gomock.NewController(t)
@@ -95,6 +131,7 @@ validate: {
 	cvpLister.EXPECT().List(labels.Everything()).Return([]*policyv1alpha1.ClusterValidatePolicy{
 		validatePolicy1,
 		validatePolicy2,
+		validatePolicy3,
 	}, nil).AnyTimes()
 
 	for _, tt := range tests {
@@ -102,6 +139,61 @@ validate: {
 			result, err := m.ApplyValidatePolicies(tt.object, tt.oldObject, tt.operation)
 			if !reflect.DeepEqual(result, tt.wantedResult) || !reflect.DeepEqual(err, tt.wantedErr) {
 				t.Errorf("ApplyValidatePolicies() = %v, %v want %v, %v", result, err, tt.wantedResult, tt.wantedErr)
+			}
+		})
+	}
+}
+
+func Test_executeCueV2(t *testing.T) {
+	type args struct {
+		cueStr     string
+		parameters []cue.Parameter
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *ValidateResult
+		wantErr bool
+	}{
+		{
+			name: "normal",
+			args: args{
+				cueStr: `
+data: _ @tag(data)
+validate: {
+if data.object.name == "cue" {
+		valid: false
+		reason: "name cannot be cue"
+}
+}
+				`,
+				parameters: []cue.Parameter{
+					{
+						Name: utils.DataParameterName,
+						Object: map[string]any{
+							"object": map[string]any{
+								"name": "cue",
+							},
+						},
+					},
+				},
+			},
+			want: &ValidateResult{
+				Reason: "name cannot be cue",
+				Valid:  false,
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := executeCueV2(tt.args.cueStr, tt.args.parameters)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("executeCueV2() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("executeCueV2() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
