@@ -34,9 +34,9 @@ type FakeClusterValidatePolicies struct {
 	Fake *FakePolicyV1alpha1
 }
 
-var clustervalidatepoliciesResource = schema.GroupVersionResource{Group: "policy", Version: "v1alpha1", Resource: "clustervalidatepolicies"}
+var clustervalidatepoliciesResource = schema.GroupVersionResource{Group: "policy.kcloudlabs.io", Version: "v1alpha1", Resource: "clustervalidatepolicies"}
 
-var clustervalidatepoliciesKind = schema.GroupVersionKind{Group: "policy", Version: "v1alpha1", Kind: "ClusterValidatePolicy"}
+var clustervalidatepoliciesKind = schema.GroupVersionKind{Group: "policy.kcloudlabs.io", Version: "v1alpha1", Kind: "ClusterValidatePolicy"}
 
 // Get takes name of the clusterValidatePolicy, and returns the corresponding clusterValidatePolicy object, and an error if there is any.
 func (c *FakeClusterValidatePolicies) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.ClusterValidatePolicy, err error) {
