@@ -203,7 +203,7 @@ func (o *overrideManagerImpl) getOverridersFromOverridePolicies(policies []Gener
 
 // applyPolicyOverriders applies OverridePolicy/ClusterOverridePolicy overriders to target object
 func (o *overrideManagerImpl) applyPolicyOverriders(rawObj, oldObj *unstructured.Unstructured, overriders policyv1alpha1.Overriders) error {
-	if overriders.Template != nil {
+	if overriders.Template != nil && overriders.RenderedCue != "" {
 		p, err := cue.BuildCueParamsViaOverridePolicy(o.dynamicClient, rawObj, &overriders)
 		if err != nil {
 			return fmt.Errorf("BuildCueParamsViaOverridePolicy error=%w", err)

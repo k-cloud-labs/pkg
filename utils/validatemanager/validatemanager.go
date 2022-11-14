@@ -58,7 +58,7 @@ func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstruc
 						oldObj = nil
 					}
 
-					if rule.Template != nil {
+					if rule.Template != nil && rule.RenderedCue != "" {
 						klog.InfoS("template rule")
 						p, err := cue.BuildCueParamsViaValidatePolicy(m.dynamicClient, rawObj, rule.Template)
 						if err != nil {
@@ -92,16 +92,18 @@ func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstruc
 						}
 					}
 
-					result, err := executeCue(rawObj, oldObj, rule.Cue)
-					if err != nil {
-						klog.ErrorS(err, "Failed to apply validate policy.",
+					if rule.Cue != "" {
+						result, err := executeCue(rawObj, oldObj, rule.Cue)
+						if err != nil {
+							klog.ErrorS(err, "Failed to apply validate policy.",
+								"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
+							return nil, err
+						}
+						klog.V(2).InfoS("Applied validate policy.",
 							"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
-						return nil, err
-					}
-					klog.V(2).InfoS("Applied validate policy.",
-						"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
-					if !result.Valid {
-						return result, nil
+						if !result.Valid {
+							return result, nil
+						}
 					}
 				}
 			}
@@ -114,7 +116,9 @@ func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstruc
 }
 
 func executeCueV2(cueStr string, parameters []cue.Parameter) (*ValidateResult, error) {
-	result := ValidateResult{}
+	result := ValidateResult{
+		Valid: true,
+	}
 	if err := cue.CueDoAndReturn(cueStr, parameters, utils.ValidateOutputName, &result); err != nil {
 		return nil, err
 	}
@@ -124,7 +128,9 @@ func executeCueV2(cueStr string, parameters []cue.Parameter) (*ValidateResult, e
 }
 
 func executeCue(rawObj *unstructured.Unstructured, oldObj *unstructured.Unstructured, template string) (*ValidateResult, error) {
-	result := ValidateResult{}
+	result := ValidateResult{
+		Valid: true,
+	}
 	parameters := []cue.Parameter{
 		{
 			Name:   utils.ObjectParameterName,
