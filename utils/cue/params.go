@@ -273,7 +273,7 @@ func getHttpResponse(c *http.Client, obj *unstructured.Unstructured, ref *policy
 	}
 
 	var (
-		query url.Values
+		query = url.Values{}
 		body  io.Reader
 	)
 	for k, v := range ref.Params {
