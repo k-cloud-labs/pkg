@@ -47,7 +47,7 @@ type ValidateRuleWithOperation struct {
 
 	// Template of condition which defines validate cond, and
 	// it will be rendered to CUE and store in RenderedCue field, so
-	//if there are any data added manually will be erased.
+	// if there are any data added manually will be erased.
 	// +optional
 	Template *TemplateCondition `json:"template,omitempty"`
 

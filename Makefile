@@ -103,7 +103,7 @@ vet: ## Vet project files
 	@$(GO) vet $(VETPACKAGES)
 
 .PHONY: docs
-docs-generate: ## generate crd api docs
+docs-generate: gen-crd-api-reference-docs ## generate crd api docs
 	$(GEN_CRD_API_REFERENCE_DOCS) -config \
 		./docs/apidoc.config.json \
 		-api-dir "./apis/policy/v1alpha1" \
