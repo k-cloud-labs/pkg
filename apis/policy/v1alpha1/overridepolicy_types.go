@@ -163,7 +163,7 @@ type TemplateRule struct {
 	// +required
 	Operation OverriderOperator `json:"operation,omitempty"`
 	// Path is field path of current object(e.g. `/spec/affinity`)
-	// If current type is annotations of labels, then only need to provide the key, no need whole path.
+	// If current type is annotations or labels, then only need to provide the key, no need whole path.
 	// +optional
 	Path string `json:"path,omitempty"`
 	// Value sets exact value for rule, like enum or numbers
@@ -214,9 +214,14 @@ type HttpDataRef struct {
 	// Method as basic http method(e.g. GET or POST)
 	// +required
 	Method string `json:"method,omitempty"`
-	// Params represents the query value when it's get request and json body when it's a post request.
+	// Header represents the custom header added to http request header.
+	// +optional
+	Header map[string]string `json:"header,omitempty"`
+	// Params represents the query value for http request.
 	// +optional
 	Params map[string]string `json:"params,omitempty"`
+	// Body represents the json body when http method is POST.
+	Body apiextensionsv1.JSON `json:"body,omitempty"`
 }
 
 // ResourcesOversellRule defines factor of resource oversell

@@ -287,6 +287,14 @@ nil means matching all resources.</p>
 </tr>
 </tbody>
 </table>
+<h3 id="policy.kcloudlabs.io/v1alpha1.AffectMode">AffectMode
+(<code>string</code> alias)</h3>
+<p>
+(<em>Appears on:</em><a href="#policy.kcloudlabs.io/v1alpha1.TemplateCondition">TemplateCondition</a>)
+</p>
+<div>
+<p>AffectMode is defining match affect</p>
+</div>
 <h3 id="policy.kcloudlabs.io/v1alpha1.ClusterValidatePolicySpec">ClusterValidatePolicySpec
 </h3>
 <p>
@@ -378,6 +386,9 @@ nil means matching all resources.</p>
 </td>
 </tr><tr><td><p>&#34;NotIn&#34;</p></td>
 <td><p>CondNotIn - <code>NotIn</code></p>
+</td>
+</tr><tr><td><p>&#34;Regex&#34;</p></td>
+<td><p>CondRegex match regex. e.g. <code>/^\d{1,}$/</code></p>
 </td>
 </tr></tbody>
 </table>
@@ -549,6 +560,18 @@ string
 </tr>
 <tr>
 <td>
+<code>header</code><br/>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Header represents the custom header added to http request header.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>params</code><br/>
 <em>
 map[string]string
@@ -556,7 +579,18 @@ map[string]string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Params represents the query value when it&rsquo;s get request and json body when it&rsquo;s a post request.</p>
+<p>Params represents the query value for http request.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>body</code><br/>
+<em>
+k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1.JSON
+</em>
+</td>
+<td>
+<p>Body represents the json body when http method is POST.</p>
 </td>
 </tr>
 </tbody>
@@ -768,10 +802,70 @@ Must be empty when operator is Remove.</p>
 </tr>
 </tbody>
 </table>
+<h3 id="policy.kcloudlabs.io/v1alpha1.PodAvailableBadge">PodAvailableBadge
+</h3>
+<p>
+(<em>Appears on:</em><a href="#policy.kcloudlabs.io/v1alpha1.ValidateRuleWithOperation">ValidateRuleWithOperation</a>)
+</p>
+<div>
+</div>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>maxUnavailable</code><br/>
+<em>
+k8s.io/apimachinery/pkg/util/intstr.IntOrString
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>MaxUnavailable sets the percentage or number of max unavailable pod of workload.
+e.g. if sets 60% and workload replicas is 5, then maxUnavailable is 3
+maxUnavailable and minAvailable are mutually exclusive, maxUnavailable is priority to take effect.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>minAvailable</code><br/>
+<em>
+k8s.io/apimachinery/pkg/util/intstr.IntOrString
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>MinAvailable sets the percentage or number of min available pod of workload.
+e.g. if sets 40% and workload replicas is 5, then minAvailable is 2.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ownerReference</code><br/>
+<em>
+<a href="#policy.kcloudlabs.io/v1alpha1.ResourceRefer">
+ResourceRefer
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>OwnerReference represents owner of current pod, in default case no need to set this field since
+in most of the cases we can get replicas of owner workload. But in some cases, pod might run without
+owner workload, so it need to get replicas from some other resource or remote api.</p>
+</td>
+</tr>
+</tbody>
+</table>
 <h3 id="policy.kcloudlabs.io/v1alpha1.ResourceRefer">ResourceRefer
 </h3>
 <p>
-(<em>Appears on:</em><a href="#policy.kcloudlabs.io/v1alpha1.TemplateCondition">TemplateCondition</a>, <a href="#policy.kcloudlabs.io/v1alpha1.TemplateRule">TemplateRule</a>)
+(<em>Appears on:</em><a href="#policy.kcloudlabs.io/v1alpha1.PodAvailableBadge">PodAvailableBadge</a>, <a href="#policy.kcloudlabs.io/v1alpha1.TemplateCondition">TemplateCondition</a>, <a href="#policy.kcloudlabs.io/v1alpha1.TemplateRule">TemplateRule</a>)
 </p>
 <div>
 <p>ResourceRefer defines different types of ref data</p>
@@ -1085,6 +1179,22 @@ Overriders
 <tbody>
 <tr>
 <td>
+<code>affectMode</code><br/>
+<em>
+<a href="#policy.kcloudlabs.io/v1alpha1.AffectMode">
+AffectMode
+</a>
+</em>
+</td>
+<td>
+<em>(<code>Required</code>)</em>
+<p>AffectMode represents the mode of policy hit affect, in default case(reject), webhook rejects the operation when
+policy hit, otherwise it will allow the operation.
+If mode is <code>allow</code>, only allow the operation when policy hit, otherwise reject them all.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>cond</code><br/>
 <em>
 <a href="#policy.kcloudlabs.io/v1alpha1.Cond">
@@ -1209,7 +1319,7 @@ string
 <td>
 <em>(Optional)</em>
 <p>Path is field path of current object(e.g. <code>/spec/affinity</code>)
-If current type is annotations of labels, then only need to provide the key, no need whole path.</p>
+If current type is annotations or labels, then only need to provide the key, no need whole path.</p>
 </td>
 </tr>
 <tr>
@@ -1305,7 +1415,7 @@ Kubernetes core/v1.Affinity
 (<em>Appears on:</em><a href="#policy.kcloudlabs.io/v1alpha1.ClusterValidatePolicySpec">ClusterValidatePolicySpec</a>)
 </p>
 <div>
-<p>ValidateRuleWithOperation defines the validate rules on operations.</p>
+<p>ValidateRuleWithOperation defines validate rules on operations.</p>
 </div>
 <table>
 <thead>
@@ -1356,7 +1466,23 @@ TemplateCondition
 <em>(Optional)</em>
 <p>Template of condition which defines validate cond, and
 it will be rendered to CUE and store in RenderedCue field, so
-if there are any data added manually will be erased.</p>
+if there are any data added manually will be erased.
+Note: template and podAvailableBadge are <strong>MUTUALLY EXCLUSIVE</strong>, template is priority to take effect.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podAvailableBadge</code><br/>
+<em>
+<a href="#policy.kcloudlabs.io/v1alpha1.PodAvailableBadge">
+PodAvailableBadge
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodAvailableBadge represents rule for a group pods available/unavailable number.
+It also rendered to cue and stores in renderedCue field and execute it in run-time.</p>
 </td>
 </tr>
 <tr>
@@ -1426,5 +1552,5 @@ Don&rsquo;t modify the value of this field, modify Rules instead of.</p>
 <hr/>
 <p><em>
 Generated with <code>gen-crd-api-reference-docs</code>
-on git commit <code>27ceb7a</code>.
+on git commit <code>2c59578</code>.
 </em></p>

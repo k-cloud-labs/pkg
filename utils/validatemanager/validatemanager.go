@@ -1,11 +1,14 @@
 package validatemanager
 
 import (
+	"fmt"
+
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog/v2"
 
+	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/client/listers/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/utils"
 	"github.com/k-cloud-labs/pkg/utils/cue"
@@ -51,61 +54,70 @@ func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstruc
 	}
 
 	for _, cvp := range cvps {
-		if len(cvp.Spec.ResourceSelectors) == 0 || utils.ResourceMatchSelectors(rawObj, cvp.Spec.ResourceSelectors...) {
-			for _, rule := range cvp.Spec.ValidateRules {
-				if len(rule.TargetOperations) == 0 || util.Exists(rule.TargetOperations, operation) {
-					if operation != admissionv1.Update {
-						oldObj = nil
-					}
+		result, err := m.applyValidatePolicy(cvp, rawObj, oldObj, operation)
+		if err != nil {
+			klog.ErrorS(err, "Failed to applyValidatePolicy.",
+				"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
+			return nil, err
+		}
 
-					if rule.Template != nil && rule.RenderedCue != "" {
-						klog.InfoS("template rule")
-						p, err := cue.BuildCueParamsViaValidatePolicy(m.dynamicClient, rawObj, rule.Template)
-						if err != nil {
-							klog.ErrorS(err, "Failed to build validate policy params.",
-								"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
-							return nil, err
-						}
+		if !result.Valid {
+			return result, nil
+		}
+	}
 
-						p.Object = rawObj
-						p.OldObject = oldObj
-						if p.OldObject == nil {
-							p.OldObject = &unstructured.Unstructured{Object: map[string]interface{}{}}
-						}
+	return &ValidateResult{
+		Valid: true,
+	}, nil
+}
 
-						result, err := executeCueV2(rule.RenderedCue, []cue.Parameter{
-							{
-								Name:   utils.DataParameterName,
-								Object: p,
-							},
-						})
-						if err != nil {
-							klog.ErrorS(err, "Failed to execute validate policy.",
-								"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
-							return nil, err
-						}
+func (m *validateManagerImpl) applyValidatePolicy(cvp *policyv1alpha1.ClusterValidatePolicy, rawObj, oldObj *unstructured.Unstructured,
+	operation admissionv1.Operation) (*ValidateResult, error) {
+	if len(cvp.Spec.ResourceSelectors) > 0 && !utils.ResourceMatchSelectors(rawObj, cvp.Spec.ResourceSelectors...) {
+		//no matched
+		return &ValidateResult{Valid: true}, nil
+	}
 
-						klog.V(2).InfoS("Applied validate policy.",
-							"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
-						if !result.Valid {
-							return result, nil
-						}
-					}
+	for _, rule := range cvp.Spec.ValidateRules {
+		if len(rule.TargetOperations) > 0 && !util.Exists(rule.TargetOperations, operation) {
+			// no matched
+			continue
+		}
+		if operation != admissionv1.Update {
+			oldObj = nil
+		}
 
-					if rule.Cue != "" {
-						result, err := executeCue(rawObj, oldObj, rule.Cue)
-						if err != nil {
-							klog.ErrorS(err, "Failed to apply validate policy.",
-								"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
-							return nil, err
-						}
-						klog.V(2).InfoS("Applied validate policy.",
-							"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
-						if !result.Valid {
-							return result, nil
-						}
-					}
-				}
+		if rule.RenderedCue != "" {
+			params := &cue.CueParams{
+				Object:    rawObj,
+				OldObject: oldObj,
+			}
+
+			result, err := m.executeRenderedCue(params, &rule, cvp.Name)
+			if err != nil {
+				klog.ErrorS(err, "Failed to execute rendered cue.",
+					"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
+				return nil, err
+			}
+
+			klog.V(2).InfoS("Applied validate policy.",
+				"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
+			if !result.Valid {
+				return result, nil
+			}
+		}
+
+		if rule.Cue != "" {
+			result, err := executeCue(rawObj, oldObj, rule.Cue)
+			if err != nil {
+				klog.ErrorS(err, "Failed to apply validate policy.",
+					"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
+				return nil, err
+			}
+			klog.V(2).InfoS("Applied validate policy.",
+				"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
+			if !result.Valid {
+				return result, nil
 			}
 		}
 	}
@@ -113,6 +125,46 @@ func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstruc
 	return &ValidateResult{
 		Valid: true,
 	}, nil
+}
+
+func (m *validateManagerImpl) executeRenderedCue(params *cue.CueParams, rule *policyv1alpha1.ValidateRuleWithOperation, cvpName string) (*ValidateResult, error) {
+	var (
+		extraParams *cue.CueParams
+		err         error
+	)
+
+	if rule.Template != nil {
+		extraParams, err = cue.BuildCueParamsViaValidatePolicy(m.dynamicClient, params.Object, rule.Template)
+	} else if rule.PodAvailableBadge != nil {
+		// support pab
+		extraParams, err = cue.BuildCueParamsViaValidatePAB(m.dynamicClient, params.Object, rule.PodAvailableBadge)
+	} else {
+		return nil, fmt.Errorf("invalid validate policy")
+	}
+	if err != nil {
+		klog.ErrorS(err, "Failed to build validate policy params.",
+			"validatepolicy", cvpName, "resource", klog.KObj(params.Object))
+		return nil, err
+	}
+
+	params.ExtraParams = extraParams.ExtraParams
+	result, err := executeCueV2(rule.RenderedCue, []cue.Parameter{
+		{
+			Name:   utils.DataParameterName,
+			Object: params,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if rule.Template != nil && rule.Template.AffectMode == policyv1alpha1.AffectModeAllow {
+		// if valid is true -> not match current policy -> reject operation
+		// if valid is false -> matches policy -> allow operation
+		result.Valid = !result.Valid
+	}
+
+	return result, nil
 }
 
 func executeCueV2(cueStr string, parameters []cue.Parameter) (*ValidateResult, error) {

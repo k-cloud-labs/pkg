@@ -115,13 +115,175 @@ spec:
                 description: ValidateRules defines a collection of validate rules
                   on target operations.
                 items:
-                  description: ValidateRuleWithOperation defines the validate rules
-                    on operations.
+                  description: ValidateRuleWithOperation defines validate rules on
+                    operations.
                   properties:
                     cue:
                       description: Cue represents validate rules defined with cue
                         code.
                       type: string
+                    podAvailableBadge:
+                      description: PodAvailableBadge represents rule for a group pods
+                        available/unavailable number. It also rendered to cue and
+                        stores in renderedCue field and execute it in run-time.
+                      properties:
+                        maxUnavailable:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          description: MaxUnavailable sets the percentage or number
+                            of max unavailable pod of workload. e.g. if sets 60% and
+                            workload replicas is 5, then maxUnavailable is 3 maxUnavailable
+                            and minAvailable are mutually exclusive, maxUnavailable
+                            is priority to take effect.
+                          x-kubernetes-int-or-string: true
+                        minAvailable:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          description: MinAvailable sets the percentage or number
+                            of min available pod of workload. e.g. if sets 40% and
+                            workload replicas is 5, then minAvailable is 2.
+                          x-kubernetes-int-or-string: true
+                        ownerReference:
+                          description: OwnerReference represents owner of current
+                            pod, in default case no need to set this field since in
+                            most of the cases we can get replicas of owner workload.
+                            But in some cases, pod might run without owner workload,
+                            so it need to get replicas from some other resource or
+                            remote api.
+                          properties:
+                            from:
+                              allOf:
+                              - enum:
+                                - current
+                                - old
+                                - k8s
+                                - owner
+                                - http
+                              - enum:
+                                - current
+                                - old
+                                - k8s
+                                - owner
+                                - http
+                              description: From represents where this referenced object
+                                are.
+                              type: string
+                            http:
+                              description: Http means refer data from remote api.
+                              properties:
+                                body:
+                                  description: Body represents the json body when
+                                    http method is POST.
+                                  x-kubernetes-preserve-unknown-fields: true
+                                header:
+                                  additionalProperties:
+                                    type: string
+                                  description: Header represents the custom header
+                                    added to http request header.
+                                  type: object
+                                method:
+                                  description: Method as basic http method(e.g. GET
+                                    or POST)
+                                  type: string
+                                params:
+                                  additionalProperties:
+                                    type: string
+                                  description: Params represents the query value for
+                                    http request.
+                                  type: object
+                                url:
+                                  description: URL as whole http url
+                                  type: string
+                              type: object
+                            k8s:
+                              description: K8s means refer another object from current
+                                cluster.
+                              properties:
+                                apiVersion:
+                                  description: APIVersion represents the API version
+                                    of the target resources.
+                                  type: string
+                                kind:
+                                  description: Kind represents the Kind of the target
+                                    resources.
+                                  type: string
+                                labelSelector:
+                                  description: A label query over a set of resources.
+                                    If name is not empty, labelSelector will be ignored.
+                                  properties:
+                                    matchExpressions:
+                                      description: matchExpressions is a list of label
+                                        selector requirements. The requirements are
+                                        ANDed.
+                                      items:
+                                        description: A label selector requirement
+                                          is a selector that contains values, a key,
+                                          and an operator that relates the key and
+                                          values.
+                                        properties:
+                                          key:
+                                            description: key is the label key that
+                                              the selector applies to.
+                                            type: string
+                                          operator:
+                                            description: operator represents a key's
+                                              relationship to a set of values. Valid
+                                              operators are In, NotIn, Exists and
+                                              DoesNotExist.
+                                            type: string
+                                          values:
+                                            description: values is an array of string
+                                              values. If the operator is In or NotIn,
+                                              the values array must be non-empty.
+                                              If the operator is Exists or DoesNotExist,
+                                              the values array must be empty. This
+                                              array is replaced during a strategic
+                                              merge patch.
+                                            items:
+                                              type: string
+                                            type: array
+                                        required:
+                                        - key
+                                        - operator
+                                        type: object
+                                      type: array
+                                    matchLabels:
+                                      additionalProperties:
+                                        type: string
+                                      description: matchLabels is a map of {key,value}
+                                        pairs. A single {key,value} in the matchLabels
+                                        map is equivalent to an element of matchExpressions,
+                                        whose key field is "key", the operator is
+                                        "In", and the values array contains only "value".
+                                        The requirements are ANDed.
+                                      type: object
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                name:
+                                  description: Name of the target resource. Default
+                                    is empty, which means selecting all resources.
+                                  type: string
+                                namespace:
+                                  description: Namespace of the target resource. Default
+                                    is empty, which means inherit from the parent
+                                    object scope.
+                                  type: string
+                              required:
+                              - apiVersion
+                              - kind
+                              type: object
+                            path:
+                              description: Path has different meaning, it represents
+                                current object field path like "/spec/replica" when
+                                From equals "current" and it also can be format like
+                                "data.result.x.y" when From equals "http", it represents
+                                the path in http response Only when From is owner(means
+                                refer current object owner), the path can be empty.
+                              type: string
+                          type: object
+                      type: object
                     renderedCue:
                       description: RenderedCue represents validate rule defined by
                         Template. Don't modify the value of this field, modify Rules
@@ -139,10 +301,26 @@ spec:
                         type: string
                       type: array
                     template:
-                      description: Template of condition which defines validate cond,
+                      description: 'Template of condition which defines validate cond,
                         and it will be rendered to CUE and store in RenderedCue field,
-                        so if there are any data added manually will be erased.
+                        so if there are any data added manually will be erased. Note:
+                        template and podAvailableBadge are **MUTUALLY EXCLUSIVE**,
+                        template is priority to take effect.'
                       properties:
+                        affectMode:
+                          allOf:
+                          - enum:
+                            - reject
+                            - allow
+                          - enum:
+                            - reject
+                            - allow
+                          description: AffectMode represents the mode of policy hit
+                            affect, in default case(reject), webhook rejects the operation
+                            when policy hit, otherwise it will allow the operation.
+                            If mode is `allow`, only allow the operation when policy
+                            hit, otherwise reject them all.
+                          type: string
                         cond:
                           allOf:
                           - enum:
@@ -195,6 +373,16 @@ spec:
                             http:
                               description: Http means refer data from remote api.
                               properties:
+                                body:
+                                  description: Body represents the json body when
+                                    http method is POST.
+                                  x-kubernetes-preserve-unknown-fields: true
+                                header:
+                                  additionalProperties:
+                                    type: string
+                                  description: Header represents the custom header
+                                    added to http request header.
+                                  type: object
                                 method:
                                   description: Method as basic http method(e.g. GET
                                     or POST)
@@ -202,9 +390,8 @@ spec:
                                 params:
                                   additionalProperties:
                                     type: string
-                                  description: Params represents the query value when
-                                    it's get request and json body when it's a post
-                                    request.
+                                  description: Params represents the query value for
+                                    http request.
                                   type: object
                                 url:
                                   description: URL as whole http url
@@ -369,6 +556,16 @@ spec:
                             http:
                               description: Http means refer data from remote api.
                               properties:
+                                body:
+                                  description: Body represents the json body when
+                                    http method is POST.
+                                  x-kubernetes-preserve-unknown-fields: true
+                                header:
+                                  additionalProperties:
+                                    type: string
+                                  description: Header represents the custom header
+                                    added to http request header.
+                                  type: object
                                 method:
                                   description: Method as basic http method(e.g. GET
                                     or POST)
@@ -376,9 +573,8 @@ spec:
                                 params:
                                   additionalProperties:
                                     type: string
-                                  description: Params represents the query value when
-                                    it's get request and json body when it's a post
-                                    request.
+                                  description: Params represents the query value for
+                                    http request.
                                   type: object
                                 url:
                                   description: URL as whole http url

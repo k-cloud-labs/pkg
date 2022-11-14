@@ -1,6 +1,7 @@
 package cue
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -115,6 +116,33 @@ func BuildCueParamsViaValidatePolicy(c dynamicclient.IDynamicClient, curObject *
 				return nil, err
 			}
 			cp.ExtraParams["http_d"] = obj
+		}
+	}
+
+	return cp, nil
+}
+
+// BuildCueParamsViaValidatePAB load extra data from k8s or remote api.
+func BuildCueParamsViaValidatePAB(c dynamicclient.IDynamicClient, curObject *unstructured.Unstructured, pab *policyv1alpha1.PodAvailableBadge) (*CueParams, error) {
+	var cp = &CueParams{
+		ExtraParams: make(map[string]any),
+	}
+
+	if pab.OwnerReference != nil {
+		if pab.OwnerReference.From == policyv1alpha1.FromK8s {
+			obj, err := getObject(c, curObject, pab.OwnerReference.K8s)
+			if err != nil {
+				return nil, err
+			}
+			cp.ExtraParams["otherObject"] = obj
+		}
+
+		if pab.OwnerReference.From == policyv1alpha1.FromHTTP {
+			obj, err := getHttpResponse(nil, curObject, pab.OwnerReference.Http)
+			if err != nil {
+				return nil, err
+			}
+			cp.ExtraParams["http"] = obj
 		}
 	}
 
@@ -244,24 +272,35 @@ func getHttpResponse(c *http.Client, obj *unstructured.Unstructured, ref *policy
 		}
 	}
 
-	val := url.Values{}
+	var (
+		query url.Values
+		body  io.Reader
+	)
 	for k, v := range ref.Params {
 		refVal, err := parseAndGetRefValue(v, obj)
 		if err != nil {
 			return nil, err
 		}
-		val.Set(k, refVal)
+		query.Set(k, refVal)
 	}
-	req, err := http.NewRequest(ref.Method, ref.URL+"?"+val.Encode(), nil)
+
+	if len(ref.Body.Raw) > 0 {
+		body = bytes.NewBuffer(ref.Body.Raw)
+	}
+
+	req, err := http.NewRequest(ref.Method, ref.URL+"?"+query.Encode(), body)
 	if err != nil {
 		return nil, err
+	}
+	for k, v := range ref.Header {
+		req.Header.Add(k, v)
 	}
 
 	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer noErr(resp.Body.Close)
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -273,6 +312,10 @@ func getHttpResponse(c *http.Client, obj *unstructured.Unstructured, ref *policy
 		"header":  resp.Header,
 		"trailer": resp.Trailer,
 	}, nil
+}
+
+func noErr(f func() error) {
+	_ = f()
 }
 
 func parseAndGetRefValue(refKey string, obj *unstructured.Unstructured) (string, error) {

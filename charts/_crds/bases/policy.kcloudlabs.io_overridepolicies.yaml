@@ -1099,7 +1099,7 @@ spec:
                               type: string
                             path:
                               description: Path is field path of current object(e.g.
-                                `/spec/affinity`) If current type is annotations of
+                                `/spec/affinity`) If current type is annotations or
                                 labels, then only need to provide the key, no need
                                 whole path.
                               type: string
@@ -1284,6 +1284,16 @@ spec:
                                 http:
                                   description: Http means refer data from remote api.
                                   properties:
+                                    body:
+                                      description: Body represents the json body when
+                                        http method is POST.
+                                      x-kubernetes-preserve-unknown-fields: true
+                                    header:
+                                      additionalProperties:
+                                        type: string
+                                      description: Header represents the custom header
+                                        added to http request header.
+                                      type: object
                                     method:
                                       description: Method as basic http method(e.g.
                                         GET or POST)
@@ -1292,8 +1302,7 @@ spec:
                                       additionalProperties:
                                         type: string
                                       description: Params represents the query value
-                                        when it's get request and json body when it's
-                                        a post request.
+                                        for http request.
                                       type: object
                                     url:
                                       description: URL as whole http url

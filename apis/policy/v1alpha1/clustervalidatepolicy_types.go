@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // ClusterValidatePolicySpec defines the desired behavior of ClusterValidatePolicy.
@@ -33,7 +34,7 @@ type ClusterValidatePolicySpec struct {
 	ValidateRules []ValidateRuleWithOperation `json:"validateRules"`
 }
 
-// ValidateRuleWithOperation defines the validate rules on operations.
+// ValidateRuleWithOperation defines validate rules on operations.
 type ValidateRuleWithOperation struct {
 	// Operations is the operations the admission hook cares about - CREATE, UPDATE, DELETE, CONNECT or *
 	// for all of those operations and any future admission operations that are added.
@@ -48,8 +49,14 @@ type ValidateRuleWithOperation struct {
 	// Template of condition which defines validate cond, and
 	// it will be rendered to CUE and store in RenderedCue field, so
 	// if there are any data added manually will be erased.
+	// Note: template and podAvailableBadge are **MUTUALLY EXCLUSIVE**, template is priority to take effect.
 	// +optional
 	Template *TemplateCondition `json:"template,omitempty"`
+
+	// PodAvailableBadge represents rule for a group pods available/unavailable number.
+	// It also rendered to cue and stores in renderedCue field and execute it in run-time.
+	// +optional
+	PodAvailableBadge *PodAvailableBadge `json:"podAvailableBadge,omitempty"`
 
 	// RenderedCue represents validate rule defined by Template.
 	// Don't modify the value of this field, modify Rules instead of.
@@ -82,9 +89,28 @@ const (
 	CondLesser Cond = "Lt"
 	// CondLesserOrEqual - `Lte`
 	CondLesserOrEqual Cond = "Lte"
+	// CondRegex match regex. e.g. `/^\d{1,}$/`
+	CondRegex Cond = "Regex"
+)
+
+// AffectMode is defining match affect
+// +kubebuilder:validation:Enum=reject;allow
+type AffectMode string
+
+const (
+	// AffectModeReject means reject the operation when policy hit by resource.
+	AffectModeReject = "reject"
+	// AffectModeAllow means only allow the operation when policy hit by resource.
+	AffectModeAllow = "allow"
 )
 
 type TemplateCondition struct {
+	// AffectMode represents the mode of policy hit affect, in default case(reject), webhook rejects the operation when
+	// policy hit, otherwise it will allow the operation.
+	// If mode is `allow`, only allow the operation when policy hit, otherwise reject them all.
+	// +kubebuilder:validation:Enum=reject;allow
+	// +required
+	AffectMode AffectMode `json:"affectMode,omitempty"`
 	// Cond represents type of condition (e.g. Equal, Exist)
 	// +kubebuilder:validation:Enum=Equal;NotEqual;Exist;NotExist;In;NotIn;Gt;Gte;Lt;Lte
 	// +required
@@ -103,6 +129,23 @@ type TemplateCondition struct {
 	// Need specify the type of object and how to get it.
 	// +optional
 	ValueRef *ResourceRefer `json:"valueRef,omitempty"`
+}
+
+type PodAvailableBadge struct {
+	// MaxUnavailable sets the percentage or number of max unavailable pod of workload.
+	// e.g. if sets 60% and workload replicas is 5, then maxUnavailable is 3
+	// maxUnavailable and minAvailable are mutually exclusive, maxUnavailable is priority to take effect.
+	// +optional
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
+	// MinAvailable sets the percentage or number of min available pod of workload.
+	// e.g. if sets 40% and workload replicas is 5, then minAvailable is 2.
+	// +optional
+	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty"`
+	// OwnerReference represents owner of current pod, in default case no need to set this field since
+	// in most of the cases we can get replicas of owner workload. But in some cases, pod might run without
+	// owner workload, so it need to get replicas from some other resource or remote api.
+	// +optional
+	OwnerReference *ResourceRefer `json:"ownerReference,omitempty"`
 }
 
 // +genclient
