@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"text/template"
 
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	"github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
+	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/utils/interrupter/model"
 )
 
@@ -68,17 +68,17 @@ func NewOverrideTemplateManager(filePath string) (TemplateManager, error) {
 
 func validateOp(rule *model.OverridePolicyRenderData) bool {
 	switch rule.Type {
-	case v1alpha1.RuleTypeAnnotations:
+	case policyv1alpha1.RuleTypeAnnotations:
 		return true
-	case v1alpha1.RuleTypeLabels:
+	case policyv1alpha1.RuleTypeLabels:
 		return true
-	case v1alpha1.RuleTypeResourcesOversell:
+	case policyv1alpha1.RuleTypeResourcesOversell:
 		return rule.ResourcesOversell != nil
-	case v1alpha1.RuleTypeResources:
+	case policyv1alpha1.RuleTypeResources:
 		return rule.Resources != nil
-	case v1alpha1.RuleTypeTolerations:
+	case policyv1alpha1.RuleTypeTolerations:
 		return true
-	case v1alpha1.RuleTypeAffinity:
+	case policyv1alpha1.RuleTypeAffinity:
 		return validateAffinity(rule)
 	}
 
@@ -98,12 +98,12 @@ func validateAffinity(rule *model.OverridePolicyRenderData) bool {
 	return isNodeAffinityValid(a.NodeAffinity) || isPodAffinityValid(a.PodAffinity) || isPodAntiAffinityValid(a.PodAntiAffinity)
 }
 
-func isNodeAffinityValid(na *v1.NodeAffinity) bool {
+func isNodeAffinityValid(na *corev1.NodeAffinity) bool {
 	if na == nil {
 		return false
 	}
 
-	isRequireValid := func(req *v1.NodeSelector) bool {
+	isRequireValid := func(req *corev1.NodeSelector) bool {
 		if req == nil {
 			return false
 		}
@@ -120,7 +120,7 @@ func isNodeAffinityValid(na *v1.NodeAffinity) bool {
 
 		return false
 	}
-	isPreferredValid := func(list []v1.PreferredSchedulingTerm) bool {
+	isPreferredValid := func(list []corev1.PreferredSchedulingTerm) bool {
 		if len(list) == 0 {
 			return false
 		}
@@ -138,7 +138,7 @@ func isNodeAffinityValid(na *v1.NodeAffinity) bool {
 		isPreferredValid(na.PreferredDuringSchedulingIgnoredDuringExecution)
 }
 
-func isPodAffinityValid(pa *v1.PodAffinity) bool {
+func isPodAffinityValid(pa *corev1.PodAffinity) bool {
 	if pa == nil {
 		return false
 	}
@@ -147,7 +147,7 @@ func isPodAffinityValid(pa *v1.PodAffinity) bool {
 		len(pa.PreferredDuringSchedulingIgnoredDuringExecution) > 0
 }
 
-func isPodAntiAffinityValid(pa *v1.PodAntiAffinity) bool {
+func isPodAntiAffinityValid(pa *corev1.PodAntiAffinity) bool {
 	if pa == nil {
 		return false
 	}

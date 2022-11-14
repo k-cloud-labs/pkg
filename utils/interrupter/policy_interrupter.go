@@ -16,7 +16,7 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
+	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/utils/interrupter/model"
 	"github.com/k-cloud-labs/pkg/utils/templatemanager"
 )
@@ -51,7 +51,7 @@ func (p *policyInterrupterImpl) OnMutating(obj, oldObj *unstructured.Unstructure
 }
 
 func (p *policyInterrupterImpl) interrupt(obj, oldObj *unstructured.Unstructured, stage string) *admission.Response {
-	if obj.GetAPIVersion() != "policy.kcloudlabs.io/v1alpha1" {
+	if obj.GetAPIVersion() != "policy.kcloudlabs.io/policyv1alpha1" {
 		return nil
 	}
 
@@ -95,14 +95,14 @@ func (p *policyInterrupterImpl) interrupt(obj, oldObj *unstructured.Unstructured
 }
 
 func (p *policyInterrupterImpl) onClusterValidationPolicyChange(obj, oldObj *unstructured.Unstructured, stage string) (admission.Response, error) {
-	cvp := new(v1alpha1.ClusterValidatePolicy)
+	cvp := new(policyv1alpha1.ClusterValidatePolicy)
 	if err := convertToPolicy(obj, cvp); err != nil {
 		return admission.Response{}, err
 	}
 
-	var old *v1alpha1.ClusterValidatePolicy
+	var old *policyv1alpha1.ClusterValidatePolicy
 	if oldObj != nil {
-		old = new(v1alpha1.ClusterValidatePolicy)
+		old = new(policyv1alpha1.ClusterValidatePolicy)
 		if err := convertToPolicy(oldObj, old); err != nil {
 			return admission.Response{}, err
 		}
@@ -128,14 +128,14 @@ func (p *policyInterrupterImpl) onClusterValidationPolicyChange(obj, oldObj *uns
 }
 
 func (p *policyInterrupterImpl) onOverridePolicyChange(obj, oldObj *unstructured.Unstructured, stage string) (admission.Response, error) {
-	op := new(v1alpha1.OverridePolicy)
+	op := new(policyv1alpha1.OverridePolicy)
 	if err := convertToPolicy(obj, op); err != nil {
 		return admission.Response{}, err
 	}
 
-	var old *v1alpha1.OverridePolicy
+	var old *policyv1alpha1.OverridePolicy
 	if oldObj != nil {
-		old = new(v1alpha1.OverridePolicy)
+		old = new(policyv1alpha1.OverridePolicy)
 		if err := convertToPolicy(oldObj, old); err != nil {
 			return admission.Response{}, err
 		}
@@ -161,14 +161,14 @@ func (p *policyInterrupterImpl) onOverridePolicyChange(obj, oldObj *unstructured
 }
 
 func (p *policyInterrupterImpl) onClusterOverridePolicyChange(obj, oldObj *unstructured.Unstructured, stage string) (admission.Response, error) {
-	cop := new(v1alpha1.ClusterOverridePolicy)
+	cop := new(policyv1alpha1.ClusterOverridePolicy)
 	if err := convertToPolicy(obj, cop); err != nil {
 		return admission.Response{}, err
 	}
 
-	var old *v1alpha1.ClusterOverridePolicy
+	var old *policyv1alpha1.ClusterOverridePolicy
 	if oldObj != nil {
-		old = new(v1alpha1.ClusterOverridePolicy)
+		old = new(policyv1alpha1.ClusterOverridePolicy)
 		if err := convertToPolicy(oldObj, old); err != nil {
 			return admission.Response{}, err
 		}
@@ -193,7 +193,7 @@ func (p *policyInterrupterImpl) onClusterOverridePolicyChange(obj, oldObj *unstr
 	}
 }
 
-func (p *policyInterrupterImpl) patchClusterValidatePolicy(obj *v1alpha1.ClusterValidatePolicy) (admission.Response, error) {
+func (p *policyInterrupterImpl) patchClusterValidatePolicy(obj *policyv1alpha1.ClusterValidatePolicy) (admission.Response, error) {
 	rsp := admission.Response{}
 	for i, validateRule := range obj.Spec.ValidateRules {
 		if validateRule.Template == nil {
@@ -201,11 +201,11 @@ func (p *policyInterrupterImpl) patchClusterValidatePolicy(obj *v1alpha1.Cluster
 		}
 
 		if validateRule.Template.AffectMode == "" {
-			validateRule.Template.AffectMode = v1alpha1.AffectModeReject
+			validateRule.Template.AffectMode = policyv1alpha1.AffectModeReject
 			rsp.Patches = append(rsp.Patches, jsonpatchv2.JsonPatchOperation{
 				Operation: "replace",
 				Path:      fmt.Sprintf("/spec/validateRules/%d/template/affectMode", i),
-				Value:     v1alpha1.AffectModeReject,
+				Value:     policyv1alpha1.AffectModeReject,
 			})
 		}
 
@@ -224,7 +224,7 @@ func (p *policyInterrupterImpl) patchClusterValidatePolicy(obj *v1alpha1.Cluster
 	return rsp, nil
 }
 
-func (p *policyInterrupterImpl) patchOverridePolicy(objSpec *v1alpha1.OverridePolicySpec) (admission.Response, error) {
+func (p *policyInterrupterImpl) patchOverridePolicy(objSpec *policyv1alpha1.OverridePolicySpec) (admission.Response, error) {
 	rsp := admission.Response{}
 	for i, overrideRule := range objSpec.OverrideRules {
 		if overrideRule.Overriders.Template == nil {
@@ -248,7 +248,7 @@ func (p *policyInterrupterImpl) patchOverridePolicy(objSpec *v1alpha1.OverridePo
 
 func (p *policyInterrupterImpl) renderAndFormat(data any) (b []byte, err error) {
 	switch list := data.(type) {
-	case *v1alpha1.TemplateRule:
+	case *policyv1alpha1.TemplateRule:
 		mrd := model.OverrideRulesToOverridePolicyRenderData(list)
 		b, err := p.overrideTemplateManager.Render(mrd)
 		if err != nil {
@@ -256,7 +256,7 @@ func (p *policyInterrupterImpl) renderAndFormat(data any) (b []byte, err error) 
 		}
 
 		return p.cueManager.Format(trimBlankLine(b))
-	case *v1alpha1.TemplateCondition:
+	case *policyv1alpha1.TemplateCondition:
 		vrd := model.ValidateRulesToValidatePolicyRenderData(list)
 		b, err := p.validateTemplateManager.Render(vrd)
 		if err != nil {
@@ -269,7 +269,7 @@ func (p *policyInterrupterImpl) renderAndFormat(data any) (b []byte, err error) 
 	return nil, errors.New("unknown data type")
 }
 
-func (p *policyInterrupterImpl) validateClusterValidatePolicy(obj *v1alpha1.ClusterValidatePolicy) (admission.Response, error) {
+func (p *policyInterrupterImpl) validateClusterValidatePolicy(obj *policyv1alpha1.ClusterValidatePolicy) (admission.Response, error) {
 	for _, validateRule := range obj.Spec.ValidateRules {
 		if validateRule.Template == nil || len(validateRule.RenderedCue) == 0 {
 			continue
@@ -282,7 +282,7 @@ func (p *policyInterrupterImpl) validateClusterValidatePolicy(obj *v1alpha1.Clus
 	return admission.Allowed("ok"), nil
 }
 
-func (p *policyInterrupterImpl) validateOverridePolicy(objSpec *v1alpha1.OverridePolicySpec) (admission.Response, error) {
+func (p *policyInterrupterImpl) validateOverridePolicy(objSpec *policyv1alpha1.OverridePolicySpec) (admission.Response, error) {
 	for _, overrideRule := range objSpec.OverrideRules {
 		if err := p.cueManager.Validate([]byte(overrideRule.Overriders.RenderedCue), nil); err != nil {
 			return admission.Denied(err.Error()), nil

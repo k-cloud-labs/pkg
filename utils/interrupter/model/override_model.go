@@ -7,27 +7,27 @@ import (
 	"regexp"
 	"strings"
 
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 
-	"github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
+	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 )
 
 type OverridePolicyRenderData struct {
-	Type      v1alpha1.RuleType
-	Op        v1alpha1.OverriderOperator
+	Type      policyv1alpha1.RuleType
+	Op        policyv1alpha1.OverriderOperator
 	Path      string
 	Value     any
-	ValueType v1alpha1.ValueType
+	ValueType policyv1alpha1.ValueType
 	ValueRef  *ResourceRefer
 
 	//resource
-	Resources *v1.ResourceRequirements
+	Resources *corev1.ResourceRequirements
 	// resource oversell
-	ResourcesOversell *v1alpha1.ResourcesOversellRule
+	ResourcesOversell *policyv1alpha1.ResourcesOversellRule
 	// toleration
-	Tolerations []*v1.Toleration
+	Tolerations []*corev1.Toleration
 	// affinity
-	Affinity *v1.Affinity
+	Affinity *corev1.Affinity
 }
 
 func (mrd *OverridePolicyRenderData) String() string {
@@ -42,7 +42,7 @@ func (mrd *OverridePolicyRenderData) String() string {
 	return buf.String()
 }
 
-func OverrideRulesToOverridePolicyRenderData(or *v1alpha1.TemplateRule) *OverridePolicyRenderData {
+func OverrideRulesToOverridePolicyRenderData(or *policyv1alpha1.TemplateRule) *OverridePolicyRenderData {
 	nr := &OverridePolicyRenderData{
 		Type:              or.Type,
 		Op:                or.Operation,
@@ -55,12 +55,12 @@ func OverrideRulesToOverridePolicyRenderData(or *v1alpha1.TemplateRule) *Overrid
 		Affinity:          or.Affinity,
 	}
 	switch or.Type {
-	case v1alpha1.RuleTypeAnnotations:
+	case policyv1alpha1.RuleTypeAnnotations:
 		fallthrough
-	case v1alpha1.RuleTypeLabels:
-		nr.ValueType = v1alpha1.ValueTypeRefer
+	case policyv1alpha1.RuleTypeLabels:
+		nr.ValueType = policyv1alpha1.ValueTypeRefer
 		if or.Value != nil {
-			nr.ValueType = v1alpha1.ValueTypeConst
+			nr.ValueType = policyv1alpha1.ValueTypeConst
 			break
 		}
 
@@ -70,19 +70,19 @@ func OverrideRulesToOverridePolicyRenderData(or *v1alpha1.TemplateRule) *Overrid
 				Path: handlePath(or.ValueRef.Path),
 			}
 			switch or.ValueRef.From {
-			case v1alpha1.FromCurrentObject:
+			case policyv1alpha1.FromCurrentObject:
 				vr.CueObjectKey = "object"
-			case v1alpha1.FromOldObject:
+			case policyv1alpha1.FromOldObject:
 				vr.CueObjectKey = "oldObject"
-			case v1alpha1.FromK8s, v1alpha1.FromOwnerReference:
+			case policyv1alpha1.FromK8s, policyv1alpha1.FromOwnerReference:
 				vr.CueObjectKey = "otherObject"
-			case v1alpha1.FromHTTP:
+			case policyv1alpha1.FromHTTP:
 				vr.CueObjectKey = "http"
 			}
 
 			nr.ValueRef = vr
 		}
-	case v1alpha1.RuleTypeResourcesOversell:
+	case policyv1alpha1.RuleTypeResourcesOversell:
 		if or.ResourcesOversell != nil {
 			if !or.ResourcesOversell.CpuFactor.ValidFactor() &&
 				!or.ResourcesOversell.MemoryFactor.ValidFactor() &&

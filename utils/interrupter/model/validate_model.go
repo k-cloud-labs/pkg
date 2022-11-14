@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 
-	"github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
+	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 )
 
 type ValidatePolicyRenderData struct {
 	Cond      string
-	Value     *v1alpha1.CustomTypes
-	ValueType v1alpha1.ValueType
+	Value     *policyv1alpha1.CustomTypes
+	ValueType policyv1alpha1.ValueType
 	ValueRef  *ResourceRefer
 	DataRef   *ResourceRefer
 	Message   string
@@ -29,13 +29,13 @@ func (vrd *ValidatePolicyRenderData) String() string {
 }
 
 type ResourceRefer struct {
-	From v1alpha1.ValueRefFrom
+	From policyv1alpha1.ValueRefFrom
 	// will convert to cue reference
 	CueObjectKey string
 	Path         string
 }
 
-func ValidateRulesToValidatePolicyRenderData(vc *v1alpha1.TemplateCondition) *ValidatePolicyRenderData {
+func ValidateRulesToValidatePolicyRenderData(vc *policyv1alpha1.TemplateCondition) *ValidatePolicyRenderData {
 	nvc := &ValidatePolicyRenderData{
 		Cond:     convertCond(vc.Cond),
 		Value:    vc.Value,
@@ -45,17 +45,17 @@ func ValidateRulesToValidatePolicyRenderData(vc *v1alpha1.TemplateCondition) *Va
 	}
 
 	if nvc.Value != nil {
-		nvc.ValueType = v1alpha1.ValueTypeConst
+		nvc.ValueType = policyv1alpha1.ValueTypeConst
 	}
 
 	if nvc.ValueRef != nil {
-		nvc.ValueType = v1alpha1.ValueTypeRefer
+		nvc.ValueType = policyv1alpha1.ValueTypeRefer
 	}
 
 	return nvc
 }
 
-func convertResourceRefer(suffix string, rf *v1alpha1.ResourceRefer) *ResourceRefer {
+func convertResourceRefer(suffix string, rf *policyv1alpha1.ResourceRefer) *ResourceRefer {
 	if rf == nil {
 		return nil
 	}
@@ -65,32 +65,32 @@ func convertResourceRefer(suffix string, rf *v1alpha1.ResourceRefer) *ResourceRe
 	}
 
 	switch rf.From {
-	case v1alpha1.FromCurrentObject:
+	case policyv1alpha1.FromCurrentObject:
 		nrf.CueObjectKey = "object"
-	case v1alpha1.FromOldObject:
+	case policyv1alpha1.FromOldObject:
 		nrf.CueObjectKey = "oldObject"
-	case v1alpha1.FromK8s, v1alpha1.FromOwnerReference:
+	case policyv1alpha1.FromK8s, policyv1alpha1.FromOwnerReference:
 		nrf.CueObjectKey = "otherObject" + suffix
-	case v1alpha1.FromHTTP:
+	case policyv1alpha1.FromHTTP:
 		nrf.CueObjectKey = "http" + suffix
 	}
 
 	return nrf
 }
 
-func convertCond(c v1alpha1.Cond) string {
+func convertCond(c policyv1alpha1.Cond) string {
 	switch c {
-	case v1alpha1.CondEqual:
+	case policyv1alpha1.CondEqual:
 		return "=="
-	case v1alpha1.CondNotEqual:
+	case policyv1alpha1.CondNotEqual:
 		return "!="
-	case v1alpha1.CondGreaterOrEqual:
+	case policyv1alpha1.CondGreaterOrEqual:
 		return ">="
-	case v1alpha1.CondGreater:
+	case policyv1alpha1.CondGreater:
 		return ">"
-	case v1alpha1.CondLesserOrEqual:
+	case policyv1alpha1.CondLesserOrEqual:
 		return "<="
-	case v1alpha1.CondLesser:
+	case policyv1alpha1.CondLesser:
 		return "<"
 	default:
 		return string(c)
