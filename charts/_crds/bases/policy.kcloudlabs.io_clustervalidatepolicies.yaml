@@ -122,168 +122,6 @@ spec:
                       description: Cue represents validate rules defined with cue
                         code.
                       type: string
-                    podAvailableBadge:
-                      description: PodAvailableBadge represents rule for a group pods
-                        available/unavailable number. It also rendered to cue and
-                        stores in renderedCue field and execute it in run-time.
-                      properties:
-                        maxUnavailable:
-                          anyOf:
-                          - type: integer
-                          - type: string
-                          description: MaxUnavailable sets the percentage or number
-                            of max unavailable pod of workload. e.g. if sets 60% and
-                            workload replicas is 5, then maxUnavailable is 3 maxUnavailable
-                            and minAvailable are mutually exclusive, maxUnavailable
-                            is priority to take effect.
-                          x-kubernetes-int-or-string: true
-                        minAvailable:
-                          anyOf:
-                          - type: integer
-                          - type: string
-                          description: MinAvailable sets the percentage or number
-                            of min available pod of workload. e.g. if sets 40% and
-                            workload replicas is 5, then minAvailable is 2.
-                          x-kubernetes-int-or-string: true
-                        ownerReference:
-                          description: OwnerReference represents owner of current
-                            pod, in default case no need to set this field since in
-                            most of the cases we can get replicas of owner workload.
-                            But in some cases, pod might run without owner workload,
-                            so it need to get replicas from some other resource or
-                            remote api.
-                          properties:
-                            from:
-                              allOf:
-                              - enum:
-                                - current
-                                - old
-                                - k8s
-                                - owner
-                                - http
-                              - enum:
-                                - current
-                                - old
-                                - k8s
-                                - owner
-                                - http
-                              description: From represents where this referenced object
-                                are.
-                              type: string
-                            http:
-                              description: Http means refer data from remote api.
-                              properties:
-                                body:
-                                  description: Body represents the json body when
-                                    http method is POST.
-                                  x-kubernetes-preserve-unknown-fields: true
-                                header:
-                                  additionalProperties:
-                                    type: string
-                                  description: Header represents the custom header
-                                    added to http request header.
-                                  type: object
-                                method:
-                                  description: Method as basic http method(e.g. GET
-                                    or POST)
-                                  type: string
-                                params:
-                                  additionalProperties:
-                                    type: string
-                                  description: Params represents the query value for
-                                    http request.
-                                  type: object
-                                url:
-                                  description: URL as whole http url
-                                  type: string
-                              type: object
-                            k8s:
-                              description: K8s means refer another object from current
-                                cluster.
-                              properties:
-                                apiVersion:
-                                  description: APIVersion represents the API version
-                                    of the target resources.
-                                  type: string
-                                kind:
-                                  description: Kind represents the Kind of the target
-                                    resources.
-                                  type: string
-                                labelSelector:
-                                  description: A label query over a set of resources.
-                                    If name is not empty, labelSelector will be ignored.
-                                  properties:
-                                    matchExpressions:
-                                      description: matchExpressions is a list of label
-                                        selector requirements. The requirements are
-                                        ANDed.
-                                      items:
-                                        description: A label selector requirement
-                                          is a selector that contains values, a key,
-                                          and an operator that relates the key and
-                                          values.
-                                        properties:
-                                          key:
-                                            description: key is the label key that
-                                              the selector applies to.
-                                            type: string
-                                          operator:
-                                            description: operator represents a key's
-                                              relationship to a set of values. Valid
-                                              operators are In, NotIn, Exists and
-                                              DoesNotExist.
-                                            type: string
-                                          values:
-                                            description: values is an array of string
-                                              values. If the operator is In or NotIn,
-                                              the values array must be non-empty.
-                                              If the operator is Exists or DoesNotExist,
-                                              the values array must be empty. This
-                                              array is replaced during a strategic
-                                              merge patch.
-                                            items:
-                                              type: string
-                                            type: array
-                                        required:
-                                        - key
-                                        - operator
-                                        type: object
-                                      type: array
-                                    matchLabels:
-                                      additionalProperties:
-                                        type: string
-                                      description: matchLabels is a map of {key,value}
-                                        pairs. A single {key,value} in the matchLabels
-                                        map is equivalent to an element of matchExpressions,
-                                        whose key field is "key", the operator is
-                                        "In", and the values array contains only "value".
-                                        The requirements are ANDed.
-                                      type: object
-                                  type: object
-                                  x-kubernetes-map-type: atomic
-                                name:
-                                  description: Name of the target resource. Default
-                                    is empty, which means selecting all resources.
-                                  type: string
-                                namespace:
-                                  description: Namespace of the target resource. Default
-                                    is empty, which means inherit from the parent
-                                    object scope.
-                                  type: string
-                              required:
-                              - apiVersion
-                              - kind
-                              type: object
-                            path:
-                              description: Path has different meaning, it represents
-                                current object field path like "/spec/replica" when
-                                From equals "current" and it also can be format like
-                                "data.result.x.y" when From equals "http", it represents
-                                the path in http response Only when From is owner(means
-                                refer current object owner), the path can be empty.
-                              type: string
-                          type: object
-                      type: object
                     renderedCue:
                       description: RenderedCue represents validate rule defined by
                         Template. Don't modify the value of this field, modify Rules
@@ -307,365 +145,576 @@ spec:
                         template and podAvailableBadge are **MUTUALLY EXCLUSIVE**,
                         template is priority to take effect.'
                       properties:
-                        affectMode:
-                          allOf:
-                          - enum:
-                            - reject
-                            - allow
-                          - enum:
-                            - reject
-                            - allow
-                          description: AffectMode represents the mode of policy hit
-                            affect, in default case(reject), webhook rejects the operation
-                            when policy hit, otherwise it will allow the operation.
-                            If mode is `allow`, only allow the operation when policy
-                            hit, otherwise reject them all.
-                          type: string
-                        cond:
-                          allOf:
-                          - enum:
-                            - Equal
-                            - NotEqual
-                            - Exist
-                            - NotExist
-                            - In
-                            - NotIn
-                            - Gt
-                            - Gte
-                            - Lt
-                            - Lte
-                          - enum:
-                            - Equal
-                            - NotEqual
-                            - Exist
-                            - NotExist
-                            - In
-                            - NotIn
-                            - Gt
-                            - Gte
-                            - Lt
-                            - Lte
-                          description: Cond represents type of condition (e.g. Equal,
-                            Exist)
-                          type: string
-                        dataRef:
-                          description: DataRef represents for data reference from
-                            current or remote object. Need specify the type of object
-                            and how to get it.
+                        condition:
+                          description: Condition represents general condition rule
+                            for more custom demand.
                           properties:
-                            from:
+                            affectMode:
                               allOf:
                               - enum:
-                                - current
-                                - old
-                                - k8s
-                                - owner
-                                - http
+                                - reject
+                                - allow
                               - enum:
-                                - current
-                                - old
-                                - k8s
-                                - owner
-                                - http
-                              description: From represents where this referenced object
-                                are.
+                                - reject
+                                - allow
+                              description: AffectMode represents the mode of policy
+                                hit affect, in default case(reject), webhook rejects
+                                the operation when policy hit, otherwise it will allow
+                                the operation. If mode is `allow`, only allow the
+                                operation when policy hit, otherwise reject them all.
                               type: string
-                            http:
-                              description: Http means refer data from remote api.
-                              properties:
-                                body:
-                                  description: Body represents the json body when
-                                    http method is POST.
-                                  x-kubernetes-preserve-unknown-fields: true
-                                header:
-                                  additionalProperties:
-                                    type: string
-                                  description: Header represents the custom header
-                                    added to http request header.
-                                  type: object
-                                method:
-                                  description: Method as basic http method(e.g. GET
-                                    or POST)
-                                  type: string
-                                params:
-                                  additionalProperties:
-                                    type: string
-                                  description: Params represents the query value for
-                                    http request.
-                                  type: object
-                                url:
-                                  description: URL as whole http url
-                                  type: string
-                              type: object
-                            k8s:
-                              description: K8s means refer another object from current
-                                cluster.
-                              properties:
-                                apiVersion:
-                                  description: APIVersion represents the API version
-                                    of the target resources.
-                                  type: string
-                                kind:
-                                  description: Kind represents the Kind of the target
-                                    resources.
-                                  type: string
-                                labelSelector:
-                                  description: A label query over a set of resources.
-                                    If name is not empty, labelSelector will be ignored.
-                                  properties:
-                                    matchExpressions:
-                                      description: matchExpressions is a list of label
-                                        selector requirements. The requirements are
-                                        ANDed.
-                                      items:
-                                        description: A label selector requirement
-                                          is a selector that contains values, a key,
-                                          and an operator that relates the key and
-                                          values.
-                                        properties:
-                                          key:
-                                            description: key is the label key that
-                                              the selector applies to.
-                                            type: string
-                                          operator:
-                                            description: operator represents a key's
-                                              relationship to a set of values. Valid
-                                              operators are In, NotIn, Exists and
-                                              DoesNotExist.
-                                            type: string
-                                          values:
-                                            description: values is an array of string
-                                              values. If the operator is In or NotIn,
-                                              the values array must be non-empty.
-                                              If the operator is Exists or DoesNotExist,
-                                              the values array must be empty. This
-                                              array is replaced during a strategic
-                                              merge patch.
-                                            items:
-                                              type: string
-                                            type: array
-                                        required:
-                                        - key
-                                        - operator
-                                        type: object
-                                      type: array
-                                    matchLabels:
-                                      additionalProperties:
-                                        type: string
-                                      description: matchLabels is a map of {key,value}
-                                        pairs. A single {key,value} in the matchLabels
-                                        map is equivalent to an element of matchExpressions,
-                                        whose key field is "key", the operator is
-                                        "In", and the values array contains only "value".
-                                        The requirements are ANDed.
-                                      type: object
-                                  type: object
-                                  x-kubernetes-map-type: atomic
-                                name:
-                                  description: Name of the target resource. Default
-                                    is empty, which means selecting all resources.
-                                  type: string
-                                namespace:
-                                  description: Namespace of the target resource. Default
-                                    is empty, which means inherit from the parent
-                                    object scope.
-                                  type: string
-                              required:
-                              - apiVersion
-                              - kind
-                              type: object
-                            path:
-                              description: Path has different meaning, it represents
-                                current object field path like "/spec/replica" when
-                                From equals "current" and it also can be format like
-                                "data.result.x.y" when From equals "http", it represents
-                                the path in http response Only when From is owner(means
-                                refer current object owner), the path can be empty.
-                              type: string
-                          type: object
-                        message:
-                          description: Message specify reject message when policy
-                            hit.
-                          type: string
-                        value:
-                          description: Value sets exact value for rule, like enum
-                            or numbers
-                          properties:
-                            boolean:
-                              description: Boolean only true or false can be recognized.
-                              type: boolean
-                            float:
-                              description: 'Float as float but use string to store,
-                                so please provide in comma (e.g. float: "1.2")'
-                              type: string
-                            floatSlice:
-                              description: FloatSlice as a slice of float but using
-                                string (e.g. ["1.2", "2.3"])
-                              items:
-                                description: Float64 is alias for float64 as string
-                                type: string
-                              type: array
-                            integer:
-                              description: Integer as an integer(int64)
-                              format: int64
-                              type: integer
-                            integerSlice:
-                              description: IntegerSlice as a slice of integer(int64)
-                                (e.g. [1,2,3])
-                              items:
-                                format: int64
-                                type: integer
-                              type: array
-                            string:
-                              description: String as a string
-                              type: string
-                            stringMap:
-                              additionalProperties:
-                                type: string
-                              description: StringMap as key-value set and both are
-                                string.
-                              type: object
-                            stringSlice:
-                              description: StringSlice as a slice of string(e.g. ["a","b"])
-                              items:
-                                type: string
-                              type: array
-                          type: object
-                        valueRef:
-                          description: ValueRef represents for value reference from
-                            current or remote object. Need specify the type of object
-                            and how to get it.
-                          properties:
-                            from:
+                            cond:
                               allOf:
                               - enum:
-                                - current
-                                - old
-                                - k8s
-                                - owner
-                                - http
+                                - Equal
+                                - NotEqual
+                                - Exist
+                                - NotExist
+                                - In
+                                - NotIn
+                                - Gt
+                                - Gte
+                                - Lt
+                                - Lte
                               - enum:
-                                - current
-                                - old
-                                - k8s
-                                - owner
-                                - http
-                              description: From represents where this referenced object
-                                are.
+                                - Equal
+                                - NotEqual
+                                - Exist
+                                - NotExist
+                                - In
+                                - NotIn
+                                - Gt
+                                - Gte
+                                - Lt
+                                - Lte
+                              description: Cond represents type of condition (e.g.
+                                Equal, Exist)
                               type: string
-                            http:
-                              description: Http means refer data from remote api.
+                            dataRef:
+                              description: DataRef represents for data reference from
+                                current or remote object. Need specify the type of
+                                object and how to get it.
                               properties:
-                                body:
-                                  description: Body represents the json body when
-                                    http method is POST.
-                                  x-kubernetes-preserve-unknown-fields: true
-                                header:
-                                  additionalProperties:
-                                    type: string
-                                  description: Header represents the custom header
-                                    added to http request header.
-                                  type: object
-                                method:
-                                  description: Method as basic http method(e.g. GET
-                                    or POST)
+                                from:
+                                  allOf:
+                                  - enum:
+                                    - current
+                                    - old
+                                    - k8s
+                                    - owner
+                                    - http
+                                  - enum:
+                                    - current
+                                    - old
+                                    - k8s
+                                    - owner
+                                    - http
+                                  description: From represents where this referenced
+                                    object are.
                                   type: string
-                                params:
-                                  additionalProperties:
-                                    type: string
-                                  description: Params represents the query value for
-                                    http request.
-                                  type: object
-                                url:
-                                  description: URL as whole http url
-                                  type: string
-                              type: object
-                            k8s:
-                              description: K8s means refer another object from current
-                                cluster.
-                              properties:
-                                apiVersion:
-                                  description: APIVersion represents the API version
-                                    of the target resources.
-                                  type: string
-                                kind:
-                                  description: Kind represents the Kind of the target
-                                    resources.
-                                  type: string
-                                labelSelector:
-                                  description: A label query over a set of resources.
-                                    If name is not empty, labelSelector will be ignored.
+                                http:
+                                  description: Http means refer data from remote api.
                                   properties:
-                                    matchExpressions:
-                                      description: matchExpressions is a list of label
-                                        selector requirements. The requirements are
-                                        ANDed.
-                                      items:
-                                        description: A label selector requirement
-                                          is a selector that contains values, a key,
-                                          and an operator that relates the key and
-                                          values.
-                                        properties:
-                                          key:
-                                            description: key is the label key that
-                                              the selector applies to.
-                                            type: string
-                                          operator:
-                                            description: operator represents a key's
-                                              relationship to a set of values. Valid
-                                              operators are In, NotIn, Exists and
-                                              DoesNotExist.
-                                            type: string
-                                          values:
-                                            description: values is an array of string
-                                              values. If the operator is In or NotIn,
-                                              the values array must be non-empty.
-                                              If the operator is Exists or DoesNotExist,
-                                              the values array must be empty. This
-                                              array is replaced during a strategic
-                                              merge patch.
-                                            items:
-                                              type: string
-                                            type: array
-                                        required:
-                                        - key
-                                        - operator
-                                        type: object
-                                      type: array
-                                    matchLabels:
+                                    body:
+                                      description: Body represents the json body when
+                                        http method is POST.
+                                      x-kubernetes-preserve-unknown-fields: true
+                                    header:
                                       additionalProperties:
                                         type: string
-                                      description: matchLabels is a map of {key,value}
-                                        pairs. A single {key,value} in the matchLabels
-                                        map is equivalent to an element of matchExpressions,
-                                        whose key field is "key", the operator is
-                                        "In", and the values array contains only "value".
-                                        The requirements are ANDed.
+                                      description: Header represents the custom header
+                                        added to http request header.
                                       type: object
+                                    method:
+                                      description: Method as basic http method(e.g.
+                                        GET or POST)
+                                      type: string
+                                    params:
+                                      additionalProperties:
+                                        type: string
+                                      description: Params represents the query value
+                                        for http request.
+                                      type: object
+                                    url:
+                                      description: URL as whole http url
+                                      type: string
                                   type: object
-                                  x-kubernetes-map-type: atomic
-                                name:
-                                  description: Name of the target resource. Default
-                                    is empty, which means selecting all resources.
+                                k8s:
+                                  description: K8s means refer another object from
+                                    current cluster.
+                                  properties:
+                                    apiVersion:
+                                      description: APIVersion represents the API version
+                                        of the target resources.
+                                      type: string
+                                    kind:
+                                      description: Kind represents the Kind of the
+                                        target resources.
+                                      type: string
+                                    labelSelector:
+                                      description: A label query over a set of resources.
+                                        If name is not empty, labelSelector will be
+                                        ignored.
+                                      properties:
+                                        matchExpressions:
+                                          description: matchExpressions is a list
+                                            of label selector requirements. The requirements
+                                            are ANDed.
+                                          items:
+                                            description: A label selector requirement
+                                              is a selector that contains values,
+                                              a key, and an operator that relates
+                                              the key and values.
+                                            properties:
+                                              key:
+                                                description: key is the label key
+                                                  that the selector applies to.
+                                                type: string
+                                              operator:
+                                                description: operator represents a
+                                                  key's relationship to a set of values.
+                                                  Valid operators are In, NotIn, Exists
+                                                  and DoesNotExist.
+                                                type: string
+                                              values:
+                                                description: values is an array of
+                                                  string values. If the operator is
+                                                  In or NotIn, the values array must
+                                                  be non-empty. If the operator is
+                                                  Exists or DoesNotExist, the values
+                                                  array must be empty. This array
+                                                  is replaced during a strategic merge
+                                                  patch.
+                                                items:
+                                                  type: string
+                                                type: array
+                                            required:
+                                            - key
+                                            - operator
+                                            type: object
+                                          type: array
+                                        matchLabels:
+                                          additionalProperties:
+                                            type: string
+                                          description: matchLabels is a map of {key,value}
+                                            pairs. A single {key,value} in the matchLabels
+                                            map is equivalent to an element of matchExpressions,
+                                            whose key field is "key", the operator
+                                            is "In", and the values array contains
+                                            only "value". The requirements are ANDed.
+                                          type: object
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                    name:
+                                      description: Name of the target resource. Default
+                                        is empty, which means selecting all resources.
+                                      type: string
+                                    namespace:
+                                      description: Namespace of the target resource.
+                                        Default is empty, which means inherit from
+                                        the parent object scope.
+                                      type: string
+                                  required:
+                                  - apiVersion
+                                  - kind
+                                  type: object
+                                path:
+                                  description: Path has different meaning, it represents
+                                    current object field path like "/spec/replica"
+                                    when From equals "current" and it also can be
+                                    format like "data.result.x.y" when From equals
+                                    "http", it represents the path in http response
+                                    Only when From is owner(means refer current object
+                                    owner), the path can be empty.
                                   type: string
-                                namespace:
-                                  description: Namespace of the target resource. Default
-                                    is empty, which means inherit from the parent
-                                    object scope.
-                                  type: string
-                              required:
-                              - apiVersion
-                              - kind
                               type: object
-                            path:
-                              description: Path has different meaning, it represents
-                                current object field path like "/spec/replica" when
-                                From equals "current" and it also can be format like
-                                "data.result.x.y" when From equals "http", it represents
-                                the path in http response Only when From is owner(means
-                                refer current object owner), the path can be empty.
+                            message:
+                              description: Message specify reject message when policy
+                                hit.
                               type: string
+                            value:
+                              description: Value sets exact value for rule, like enum
+                                or numbers
+                              properties:
+                                boolean:
+                                  description: Boolean only true or false can be recognized.
+                                  type: boolean
+                                float:
+                                  description: 'Float as float but use string to store,
+                                    so please provide in comma (e.g. float: "1.2")'
+                                  type: string
+                                floatSlice:
+                                  description: FloatSlice as a slice of float but
+                                    using string (e.g. ["1.2", "2.3"])
+                                  items:
+                                    description: Float64 is alias for float64 as string
+                                    type: string
+                                  type: array
+                                integer:
+                                  description: Integer as an integer(int64)
+                                  format: int64
+                                  type: integer
+                                integerSlice:
+                                  description: IntegerSlice as a slice of integer(int64)
+                                    (e.g. [1,2,3])
+                                  items:
+                                    format: int64
+                                    type: integer
+                                  type: array
+                                string:
+                                  description: String as a string
+                                  type: string
+                                stringMap:
+                                  additionalProperties:
+                                    type: string
+                                  description: StringMap as key-value set and both
+                                    are string.
+                                  type: object
+                                stringSlice:
+                                  description: StringSlice as a slice of string(e.g.
+                                    ["a","b"])
+                                  items:
+                                    type: string
+                                  type: array
+                              type: object
+                            valueProcess:
+                              description: ValueProcess represents handle process
+                                for value or valueRef. Currently only support for
+                                number value, so make sure value or value from remote
+                                is a number.
+                              properties:
+                                operation:
+                                  description: Operation defines the type of operate
+                                    value, and it should work with operationWith.
+                                    For example, operation is `*` and operationWith
+                                    is 0.5 then in cue the value will be multiplied
+                                    by 0.5.
+                                  type: string
+                                operationWith:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  description: OperationWith defines value for operate
+                                    to handle static value or value from remote.
+                                  x-kubernetes-int-or-string: true
+                              type: object
+                            valueRef:
+                              description: ValueRef represents for value reference
+                                from current or remote object. Need specify the type
+                                of object and how to get it.
+                              properties:
+                                from:
+                                  allOf:
+                                  - enum:
+                                    - current
+                                    - old
+                                    - k8s
+                                    - owner
+                                    - http
+                                  - enum:
+                                    - current
+                                    - old
+                                    - k8s
+                                    - owner
+                                    - http
+                                  description: From represents where this referenced
+                                    object are.
+                                  type: string
+                                http:
+                                  description: Http means refer data from remote api.
+                                  properties:
+                                    body:
+                                      description: Body represents the json body when
+                                        http method is POST.
+                                      x-kubernetes-preserve-unknown-fields: true
+                                    header:
+                                      additionalProperties:
+                                        type: string
+                                      description: Header represents the custom header
+                                        added to http request header.
+                                      type: object
+                                    method:
+                                      description: Method as basic http method(e.g.
+                                        GET or POST)
+                                      type: string
+                                    params:
+                                      additionalProperties:
+                                        type: string
+                                      description: Params represents the query value
+                                        for http request.
+                                      type: object
+                                    url:
+                                      description: URL as whole http url
+                                      type: string
+                                  type: object
+                                k8s:
+                                  description: K8s means refer another object from
+                                    current cluster.
+                                  properties:
+                                    apiVersion:
+                                      description: APIVersion represents the API version
+                                        of the target resources.
+                                      type: string
+                                    kind:
+                                      description: Kind represents the Kind of the
+                                        target resources.
+                                      type: string
+                                    labelSelector:
+                                      description: A label query over a set of resources.
+                                        If name is not empty, labelSelector will be
+                                        ignored.
+                                      properties:
+                                        matchExpressions:
+                                          description: matchExpressions is a list
+                                            of label selector requirements. The requirements
+                                            are ANDed.
+                                          items:
+                                            description: A label selector requirement
+                                              is a selector that contains values,
+                                              a key, and an operator that relates
+                                              the key and values.
+                                            properties:
+                                              key:
+                                                description: key is the label key
+                                                  that the selector applies to.
+                                                type: string
+                                              operator:
+                                                description: operator represents a
+                                                  key's relationship to a set of values.
+                                                  Valid operators are In, NotIn, Exists
+                                                  and DoesNotExist.
+                                                type: string
+                                              values:
+                                                description: values is an array of
+                                                  string values. If the operator is
+                                                  In or NotIn, the values array must
+                                                  be non-empty. If the operator is
+                                                  Exists or DoesNotExist, the values
+                                                  array must be empty. This array
+                                                  is replaced during a strategic merge
+                                                  patch.
+                                                items:
+                                                  type: string
+                                                type: array
+                                            required:
+                                            - key
+                                            - operator
+                                            type: object
+                                          type: array
+                                        matchLabels:
+                                          additionalProperties:
+                                            type: string
+                                          description: matchLabels is a map of {key,value}
+                                            pairs. A single {key,value} in the matchLabels
+                                            map is equivalent to an element of matchExpressions,
+                                            whose key field is "key", the operator
+                                            is "In", and the values array contains
+                                            only "value". The requirements are ANDed.
+                                          type: object
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                    name:
+                                      description: Name of the target resource. Default
+                                        is empty, which means selecting all resources.
+                                      type: string
+                                    namespace:
+                                      description: Namespace of the target resource.
+                                        Default is empty, which means inherit from
+                                        the parent object scope.
+                                      type: string
+                                  required:
+                                  - apiVersion
+                                  - kind
+                                  type: object
+                                path:
+                                  description: Path has different meaning, it represents
+                                    current object field path like "/spec/replica"
+                                    when From equals "current" and it also can be
+                                    format like "data.result.x.y" when From equals
+                                    "http", it represents the path in http response
+                                    Only when From is owner(means refer current object
+                                    owner), the path can be empty.
+                                  type: string
+                              type: object
                           type: object
+                        podAvailableBadge:
+                          description: PodAvailableBadge stores the number or percentage
+                            to make sure a group pod won't down to zero replica.
+                          properties:
+                            maxUnavailable:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: MaxUnavailable sets the percentage or number
+                                of max unavailable pod of workload. e.g. if sets 60%
+                                and workload replicas is 5, then maxUnavailable is
+                                3 maxUnavailable and minAvailable are mutually exclusive,
+                                maxUnavailable is priority to take effect.
+                              x-kubernetes-int-or-string: true
+                            minAvailable:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: MinAvailable sets the percentage or number
+                                of min available pod of workload. e.g. if sets 40%
+                                and workload replicas is 5, then minAvailable is 2.
+                              x-kubernetes-int-or-string: true
+                            replicaReference:
+                              description: ReplicaReference represents owner of current
+                                pod, in default case no need to set this field since
+                                in most of the cases we can get replicas of owner
+                                workload. But in some cases, pod might run without
+                                owner workload, so it need to get replicas from some
+                                other resource or remote api.
+                              properties:
+                                currentReplicaPath:
+                                  description: CurrentReplicaPath represents the path
+                                    of current replica field from k8s resource or
+                                    http response. For k8s resource, usually put "/status/replica"
+                                    For http resource, put something like "body.data.currentReplica"
+                                  type: string
+                                from:
+                                  allOf:
+                                  - enum:
+                                    - current
+                                    - old
+                                    - k8s
+                                    - owner
+                                    - http
+                                  - enum:
+                                    - current
+                                    - old
+                                    - k8s
+                                    - owner
+                                    - http
+                                  description: From represents where this referenced
+                                    object are.
+                                  type: string
+                                http:
+                                  description: Http means refer data from remote api.
+                                  properties:
+                                    body:
+                                      description: Body represents the json body when
+                                        http method is POST.
+                                      x-kubernetes-preserve-unknown-fields: true
+                                    header:
+                                      additionalProperties:
+                                        type: string
+                                      description: Header represents the custom header
+                                        added to http request header.
+                                      type: object
+                                    method:
+                                      description: Method as basic http method(e.g.
+                                        GET or POST)
+                                      type: string
+                                    params:
+                                      additionalProperties:
+                                        type: string
+                                      description: Params represents the query value
+                                        for http request.
+                                      type: object
+                                    url:
+                                      description: URL as whole http url
+                                      type: string
+                                  type: object
+                                k8s:
+                                  description: K8s means refer another object from
+                                    current cluster.
+                                  properties:
+                                    apiVersion:
+                                      description: APIVersion represents the API version
+                                        of the target resources.
+                                      type: string
+                                    kind:
+                                      description: Kind represents the Kind of the
+                                        target resources.
+                                      type: string
+                                    labelSelector:
+                                      description: A label query over a set of resources.
+                                        If name is not empty, labelSelector will be
+                                        ignored.
+                                      properties:
+                                        matchExpressions:
+                                          description: matchExpressions is a list
+                                            of label selector requirements. The requirements
+                                            are ANDed.
+                                          items:
+                                            description: A label selector requirement
+                                              is a selector that contains values,
+                                              a key, and an operator that relates
+                                              the key and values.
+                                            properties:
+                                              key:
+                                                description: key is the label key
+                                                  that the selector applies to.
+                                                type: string
+                                              operator:
+                                                description: operator represents a
+                                                  key's relationship to a set of values.
+                                                  Valid operators are In, NotIn, Exists
+                                                  and DoesNotExist.
+                                                type: string
+                                              values:
+                                                description: values is an array of
+                                                  string values. If the operator is
+                                                  In or NotIn, the values array must
+                                                  be non-empty. If the operator is
+                                                  Exists or DoesNotExist, the values
+                                                  array must be empty. This array
+                                                  is replaced during a strategic merge
+                                                  patch.
+                                                items:
+                                                  type: string
+                                                type: array
+                                            required:
+                                            - key
+                                            - operator
+                                            type: object
+                                          type: array
+                                        matchLabels:
+                                          additionalProperties:
+                                            type: string
+                                          description: matchLabels is a map of {key,value}
+                                            pairs. A single {key,value} in the matchLabels
+                                            map is equivalent to an element of matchExpressions,
+                                            whose key field is "key", the operator
+                                            is "In", and the values array contains
+                                            only "value". The requirements are ANDed.
+                                          type: object
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                    name:
+                                      description: Name of the target resource. Default
+                                        is empty, which means selecting all resources.
+                                      type: string
+                                    namespace:
+                                      description: Namespace of the target resource.
+                                        Default is empty, which means inherit from
+                                        the parent object scope.
+                                      type: string
+                                  required:
+                                  - apiVersion
+                                  - kind
+                                  type: object
+                                targetReplicaPath:
+                                  description: TargetReplicaPath represents the path
+                                    of target replica field from k8s resource or http
+                                    response. For k8s resource, usually put "/spec/replica"
+                                    For http resource, put something like "body.data.targetReplica"
+                                  type: string
+                              type: object
+                          type: object
+                        type:
+                          allOf:
+                          - enum:
+                            - general
+                            - pab
+                          - enum:
+                            - general
+                            - pab
+                          description: Type represents current rule operate field
+                            type.
+                          type: string
                       type: object
                   type: object
                 type: array

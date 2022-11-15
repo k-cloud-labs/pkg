@@ -27,32 +27,31 @@ type CueParams struct {
 	ExtraParams map[string]any `json:"extraParams"`
 }
 
-func BuildCueParamsViaOverridePolicy(c dynamicclient.IDynamicClient, curObject *unstructured.Unstructured, overriders *policyv1alpha1.Overriders) (*CueParams, error) {
+func BuildCueParamsViaOverridePolicy(c dynamicclient.IDynamicClient, curObject *unstructured.Unstructured, tmpl *policyv1alpha1.OverrideRuleTemplate) (*CueParams, error) {
 	var (
 		cp = &CueParams{
 			ExtraParams: make(map[string]any),
 		}
-		rule = overriders.Template
 	)
-	if rule.ValueRef != nil {
-		klog.V(2).InfoS("BuildCueParamsViaOverridePolicy value ref", "refFrom", rule.ValueRef.From)
-		if rule.ValueRef.From == policyv1alpha1.FromOwnerReference {
+	if tmpl.ValueRef != nil {
+		klog.V(2).InfoS("BuildCueParamsViaOverridePolicy value ref", "refFrom", tmpl.ValueRef.From)
+		if tmpl.ValueRef.From == policyv1alpha1.FromOwnerReference {
 			obj, err := getOwnerReference(c, curObject)
 			if err != nil {
 				return nil, fmt.Errorf("getOwnerReference got error=%w", err)
 			}
 			cp.ExtraParams["otherObject"] = obj
 		}
-		if rule.ValueRef.From == policyv1alpha1.FromK8s {
-			obj, err := getObject(c, curObject, rule.ValueRef.K8s)
+		if tmpl.ValueRef.From == policyv1alpha1.FromK8s {
+			obj, err := getObject(c, curObject, tmpl.ValueRef.K8s)
 			if err != nil {
 				return nil, fmt.Errorf("getObject got error=%w", err)
 			}
 			cp.ExtraParams["otherObject"] = obj
 		}
 
-		if rule.ValueRef.From == policyv1alpha1.FromHTTP {
-			obj, err := getHttpResponse(nil, curObject, rule.ValueRef.Http)
+		if tmpl.ValueRef.From == policyv1alpha1.FromHTTP {
+			obj, err := getHttpResponse(nil, curObject, tmpl.ValueRef.Http)
 			if err != nil {
 				return nil, fmt.Errorf("getHttpResponse got error=%w", err)
 			}
@@ -63,7 +62,18 @@ func BuildCueParamsViaOverridePolicy(c dynamicclient.IDynamicClient, curObject *
 	return cp, nil
 }
 
-func BuildCueParamsViaValidatePolicy(c dynamicclient.IDynamicClient, curObject *unstructured.Unstructured, condition *policyv1alpha1.TemplateCondition) (*CueParams, error) {
+func BuildCueParamsViaValidatePolicy(c dynamicclient.IDynamicClient, curObject *unstructured.Unstructured, tmpl *policyv1alpha1.ValidateRuleTemplate) (*CueParams, error) {
+	switch tmpl.Type {
+	case policyv1alpha1.ValidateRuleTypeCondition:
+		return buildCueParamsForValidateCondition(c, curObject, tmpl.Condition)
+	case policyv1alpha1.ValidateRuleTypePodAvailableBadge:
+		return buildCueParamsForPAB(c, curObject, tmpl.PodAvailableBadge)
+	default:
+		return nil, fmt.Errorf("unknown template type(%v)", tmpl.Type)
+	}
+}
+
+func buildCueParamsForValidateCondition(c dynamicclient.IDynamicClient, curObject *unstructured.Unstructured, condition *policyv1alpha1.ValidateCondition) (*CueParams, error) {
 	var cp = &CueParams{
 		ExtraParams: make(map[string]any),
 	}
@@ -122,28 +132,35 @@ func BuildCueParamsViaValidatePolicy(c dynamicclient.IDynamicClient, curObject *
 	return cp, nil
 }
 
-// BuildCueParamsViaValidatePAB load extra data from k8s or remote api.
-func BuildCueParamsViaValidatePAB(c dynamicclient.IDynamicClient, curObject *unstructured.Unstructured, pab *policyv1alpha1.PodAvailableBadge) (*CueParams, error) {
+func buildCueParamsForPAB(c dynamicclient.IDynamicClient, curObject *unstructured.Unstructured, pab *policyv1alpha1.PodAvailableBadge) (*CueParams, error) {
 	var cp = &CueParams{
 		ExtraParams: make(map[string]any),
 	}
 
-	if pab.OwnerReference != nil {
-		if pab.OwnerReference.From == policyv1alpha1.FromK8s {
-			obj, err := getObject(c, curObject, pab.OwnerReference.K8s)
-			if err != nil {
-				return nil, err
-			}
-			cp.ExtraParams["otherObject"] = obj
+	if pab.ReplicaReference == nil || pab.ReplicaReference.From == policyv1alpha1.FromOwnerReference {
+		// get owner reference in default case
+		obj, err := getOwnerReference(c, curObject)
+		if err != nil {
+			return nil, fmt.Errorf("getOwnerReference got error=%w", err)
 		}
+		cp.ExtraParams["otherObject"] = obj
+		return cp, nil
+	}
 
-		if pab.OwnerReference.From == policyv1alpha1.FromHTTP {
-			obj, err := getHttpResponse(nil, curObject, pab.OwnerReference.Http)
-			if err != nil {
-				return nil, err
-			}
-			cp.ExtraParams["http"] = obj
+	if pab.ReplicaReference.From == policyv1alpha1.FromK8s {
+		obj, err := getObject(c, curObject, pab.ReplicaReference.K8s)
+		if err != nil {
+			return nil, fmt.Errorf("getObject got error=%w", err)
 		}
+		cp.ExtraParams["otherObject"] = obj
+	}
+
+	if pab.ReplicaReference.From == policyv1alpha1.FromHTTP {
+		obj, err := getHttpResponse(nil, curObject, pab.ReplicaReference.Http)
+		if err != nil {
+			return nil, fmt.Errorf("getHttpResponse got error=%w", err)
+		}
+		cp.ExtraParams["http"] = obj
 	}
 
 	return cp, nil

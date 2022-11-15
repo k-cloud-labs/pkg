@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"reflect"
 	"strings"
 
@@ -14,7 +13,6 @@ import (
 	jsonpatchv2 "gomodules.xyz/jsonpatch/v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/utils/interrupter/model"
@@ -22,13 +20,14 @@ import (
 )
 
 // PolicyInterrupter defines interrupt process for policy change
+// It validate and mutate policy.
 type PolicyInterrupter interface {
-	// OnValidating called when validate policy
+	// OnValidating called on "/validating" api to validate policy
+	// return nil means obj is not defined policy or no invalid field
+	OnValidating(obj, oldObj *unstructured.Unstructured) error
+	// OnMutating called on "/mutating" api to complete policy
 	// return nil means obj is not defined policy
-	OnValidating(obj, oldObj *unstructured.Unstructured) *admission.Response
-	// OnMutating called when policy change
-	// return nil means obj is not defined policy
-	OnMutating(obj, oldObj *unstructured.Unstructured) *admission.Response
+	OnMutating(obj, oldObj *unstructured.Unstructured) ([]jsonpatchv2.JsonPatchOperation, error)
 }
 
 type policyInterrupterImpl struct {
@@ -42,69 +41,66 @@ const (
 	stageMutate   = "mutate"
 )
 
-func (p *policyInterrupterImpl) OnValidating(obj, oldObj *unstructured.Unstructured) *admission.Response {
-	return p.interrupt(obj, oldObj, stageValidate)
+func (p *policyInterrupterImpl) OnValidating(obj, oldObj *unstructured.Unstructured) error {
+	_, err := p.interrupt(obj, oldObj, stageValidate)
+	return err
 }
 
-func (p *policyInterrupterImpl) OnMutating(obj, oldObj *unstructured.Unstructured) *admission.Response {
+func (p *policyInterrupterImpl) OnMutating(obj, oldObj *unstructured.Unstructured) ([]jsonpatchv2.JsonPatchOperation, error) {
 	return p.interrupt(obj, oldObj, stageMutate)
 }
 
-func (p *policyInterrupterImpl) interrupt(obj, oldObj *unstructured.Unstructured, stage string) *admission.Response {
-	if obj.GetAPIVersion() != "policy.kcloudlabs.io/policyv1alpha1" {
-		return nil
+func (p *policyInterrupterImpl) interrupt(obj, oldObj *unstructured.Unstructured, stage string) (
+	patches []jsonpatchv2.JsonPatchOperation, err error) {
+	group := strings.Split(obj.GetAPIVersion(), "/")[0]
+	if group != policyv1alpha1.SchemeGroupVersion.Group {
+		return
 	}
 
 	klog.Infof("policy changed. apiVersion=%v, kind=%v, stage=%v", obj.GetAPIVersion(), obj.GetKind(), stage)
 
 	// check crd type before call this func
 	kind := obj.GetKind()
-	var (
-		rsp admission.Response
-		err error
-	)
 	switch kind {
 	case "ClusterValidatePolicy":
-		rsp, err = p.onClusterValidationPolicyChange(obj, oldObj, stage)
+		patches, err = p.onClusterValidationPolicyChange(obj, oldObj, stage)
 	case "ClusterOverridePolicy":
-		rsp, err = p.onClusterOverridePolicyChange(obj, oldObj, stage)
+		patches, err = p.onClusterOverridePolicyChange(obj, oldObj, stage)
 	case "OverridePolicy":
-		rsp, err = p.onOverridePolicyChange(obj, oldObj, stage)
+		patches, err = p.onOverridePolicyChange(obj, oldObj, stage)
 	default:
-		return nil
+		return
 	}
 
 	if err != nil {
 		klog.ErrorS(err, "interrupt policy error",
 			"kind", obj.GetKind(), "namespace", obj.GetNamespace(), "name", obj.GetName())
-		rsp = admission.Errored(http.StatusInternalServerError, err)
-		return &rsp
+		return nil, err
 	}
 
-	klog.V(4).Infof("policy interrupt result.rsp=%+v", rsp)
+	klog.V(4).Infof("policy interrupt result.rsp=%+v", patches)
 	if stage == stageMutate {
-		if err := applyJSONPatch(obj, rsp.Patches); err != nil {
+		if err := applyJSONPatch(obj, patches); err != nil {
 			klog.ErrorS(err, "apply json patch error",
 				"kind", obj.GetKind(), "namespace", obj.GetNamespace(), "name", obj.GetName())
-			rsp = admission.Errored(http.StatusInternalServerError, err)
-			return &rsp
+			return nil, err
 		}
 	}
 
-	return &rsp
+	return
 }
 
-func (p *policyInterrupterImpl) onClusterValidationPolicyChange(obj, oldObj *unstructured.Unstructured, stage string) (admission.Response, error) {
+func (p *policyInterrupterImpl) onClusterValidationPolicyChange(obj, oldObj *unstructured.Unstructured, stage string) ([]jsonpatchv2.JsonPatchOperation, error) {
 	cvp := new(policyv1alpha1.ClusterValidatePolicy)
 	if err := convertToPolicy(obj, cvp); err != nil {
-		return admission.Response{}, err
+		return nil, err
 	}
 
 	var old *policyv1alpha1.ClusterValidatePolicy
 	if oldObj != nil {
 		old = new(policyv1alpha1.ClusterValidatePolicy)
 		if err := convertToPolicy(oldObj, old); err != nil {
-			return admission.Response{}, err
+			return nil, err
 		}
 	}
 
@@ -112,32 +108,31 @@ func (p *policyInterrupterImpl) onClusterValidationPolicyChange(obj, oldObj *uns
 	if old != nil {
 		// no change
 		if reflect.DeepEqual(cvp.Spec, old.Spec) {
-			return admission.Allowed("ok"), nil
+			return nil, nil
 		}
 	}
 
 	switch stage {
 	case stageValidate:
-		return p.validateClusterValidatePolicy(cvp)
+		return nil, p.validateClusterValidatePolicy(cvp)
 	case stageMutate:
 		return p.patchClusterValidatePolicy(cvp)
 	default:
-		return admission.Allowed("ok"), nil
-
+		return nil, errors.New("unknown stage")
 	}
 }
 
-func (p *policyInterrupterImpl) onOverridePolicyChange(obj, oldObj *unstructured.Unstructured, stage string) (admission.Response, error) {
+func (p *policyInterrupterImpl) onOverridePolicyChange(obj, oldObj *unstructured.Unstructured, stage string) ([]jsonpatchv2.JsonPatchOperation, error) {
 	op := new(policyv1alpha1.OverridePolicy)
 	if err := convertToPolicy(obj, op); err != nil {
-		return admission.Response{}, err
+		return nil, err
 	}
 
 	var old *policyv1alpha1.OverridePolicy
 	if oldObj != nil {
 		old = new(policyv1alpha1.OverridePolicy)
 		if err := convertToPolicy(oldObj, old); err != nil {
-			return admission.Response{}, err
+			return nil, err
 		}
 	}
 
@@ -145,32 +140,32 @@ func (p *policyInterrupterImpl) onOverridePolicyChange(obj, oldObj *unstructured
 	if old != nil {
 		// no change
 		if reflect.DeepEqual(op.Spec, old.Spec) {
-			return admission.Allowed("ok"), nil
+			return nil, nil
 		}
 	}
 
 	switch stage {
 	case stageValidate:
-		return p.validateOverridePolicy(&op.Spec)
+		return nil, p.validateOverridePolicy(&op.Spec)
 	case stageMutate:
 		return p.patchOverridePolicy(&op.Spec)
 	default:
-		return admission.Response{}, errors.New("unknown stage")
+		return nil, errors.New("unknown stage")
 
 	}
 }
 
-func (p *policyInterrupterImpl) onClusterOverridePolicyChange(obj, oldObj *unstructured.Unstructured, stage string) (admission.Response, error) {
+func (p *policyInterrupterImpl) onClusterOverridePolicyChange(obj, oldObj *unstructured.Unstructured, stage string) ([]jsonpatchv2.JsonPatchOperation, error) {
 	cop := new(policyv1alpha1.ClusterOverridePolicy)
 	if err := convertToPolicy(obj, cop); err != nil {
-		return admission.Response{}, err
+		return nil, err
 	}
 
 	var old *policyv1alpha1.ClusterOverridePolicy
 	if oldObj != nil {
 		old = new(policyv1alpha1.ClusterOverridePolicy)
 		if err := convertToPolicy(oldObj, old); err != nil {
-			return admission.Response{}, err
+			return nil, err
 		}
 	}
 
@@ -178,54 +173,68 @@ func (p *policyInterrupterImpl) onClusterOverridePolicyChange(obj, oldObj *unstr
 	if old != nil {
 		// no change
 		if reflect.DeepEqual(cop.Spec, old.Spec) {
-			return admission.Allowed("ok"), nil
+			return nil, nil
 		}
 	}
 
 	switch stage {
 	case stageValidate:
-		return p.validateOverridePolicy(&cop.Spec)
+		return nil, p.validateOverridePolicy(&cop.Spec)
 	case stageMutate:
 		return p.patchOverridePolicy(&cop.Spec)
 	default:
-		return admission.Response{}, errors.New("unknown stage")
+		return nil, errors.New("unknown stage")
 
 	}
 }
 
-func (p *policyInterrupterImpl) patchClusterValidatePolicy(obj *policyv1alpha1.ClusterValidatePolicy) (admission.Response, error) {
-	rsp := admission.Response{}
+func (p *policyInterrupterImpl) patchClusterValidatePolicy(obj *policyv1alpha1.ClusterValidatePolicy) ([]jsonpatchv2.JsonPatchOperation, error) {
+	patches := make([]jsonpatchv2.JsonPatchOperation, 0)
 	for i, validateRule := range obj.Spec.ValidateRules {
 		if validateRule.Template == nil {
 			continue
 		}
 
-		if validateRule.Template.AffectMode == "" {
-			validateRule.Template.AffectMode = policyv1alpha1.AffectModeReject
-			rsp.Patches = append(rsp.Patches, jsonpatchv2.JsonPatchOperation{
+		if validateRule.Template.Condition != nil && validateRule.Template.Condition.AffectMode == "" {
+			validateRule.Template.Condition.AffectMode = policyv1alpha1.AffectModeReject
+			patches = append(patches, jsonpatchv2.JsonPatchOperation{
 				Operation: "replace",
-				Path:      fmt.Sprintf("/spec/validateRules/%d/template/affectMode", i),
+				Path:      fmt.Sprintf("/spec/validateRules/%d/template/condition/affectMode", i),
 				Value:     policyv1alpha1.AffectModeReject,
+			})
+		}
+		if validateRule.Template.PodAvailableBadge != nil &&
+			validateRule.Template.PodAvailableBadge.ReplicaReference == nil {
+			validateRule.Template.PodAvailableBadge.ReplicaReference = &policyv1alpha1.ReplicaResourceRefer{
+				From:               policyv1alpha1.FromOwnerReference,
+				TargetReplicaPath:  "/spec/replica",
+				CurrentReplicaPath: "/status/replica",
+			}
+
+			patches = append(patches, jsonpatchv2.JsonPatchOperation{
+				Operation: "replace",
+				Path:      fmt.Sprintf("/spec/validateRules/%d/template/podAvailableBadge/replicaReference", i),
+				Value:     validateRule.Template.PodAvailableBadge.ReplicaReference,
 			})
 		}
 
 		b, err := p.renderAndFormat(validateRule.Template)
 		if err != nil {
-			return admission.Response{}, err
+			return nil, err
 		}
 
-		rsp.Patches = append(rsp.Patches, jsonpatchv2.JsonPatchOperation{
+		patches = append(patches, jsonpatchv2.JsonPatchOperation{
 			Operation: "replace",
 			Path:      fmt.Sprintf("/spec/validateRules/%d/renderedCue", i),
 			Value:     string(b),
 		})
 	}
 
-	return rsp, nil
+	return patches, nil
 }
 
-func (p *policyInterrupterImpl) patchOverridePolicy(objSpec *policyv1alpha1.OverridePolicySpec) (admission.Response, error) {
-	rsp := admission.Response{}
+func (p *policyInterrupterImpl) patchOverridePolicy(objSpec *policyv1alpha1.OverridePolicySpec) ([]jsonpatchv2.JsonPatchOperation, error) {
+	patches := make([]jsonpatchv2.JsonPatchOperation, 0)
 	for i, overrideRule := range objSpec.OverrideRules {
 		if overrideRule.Overriders.Template == nil {
 			continue
@@ -233,31 +242,31 @@ func (p *policyInterrupterImpl) patchOverridePolicy(objSpec *policyv1alpha1.Over
 
 		b, err := p.renderAndFormat(overrideRule.Overriders.Template)
 		if err != nil {
-			return admission.Response{}, err
+			return nil, err
 		}
 
-		rsp.Patches = append(rsp.Patches, jsonpatchv2.JsonPatchOperation{
+		patches = append(patches, jsonpatchv2.JsonPatchOperation{
 			Operation: "replace",
 			Path:      fmt.Sprintf("/spec/overrideRules/%d/overriders/renderedCue", i),
 			Value:     string(b),
 		})
 	}
 
-	return rsp, nil
+	return patches, nil
 }
 
 func (p *policyInterrupterImpl) renderAndFormat(data any) (b []byte, err error) {
-	switch list := data.(type) {
-	case *policyv1alpha1.TemplateRule:
-		mrd := model.OverrideRulesToOverridePolicyRenderData(list)
+	switch tmpl := data.(type) {
+	case *policyv1alpha1.OverrideRuleTemplate:
+		mrd := model.OverrideRulesToOverridePolicyRenderData(tmpl)
 		b, err := p.overrideTemplateManager.Render(mrd)
 		if err != nil {
 			return nil, err
 		}
 
 		return p.cueManager.Format(trimBlankLine(b))
-	case *policyv1alpha1.TemplateCondition:
-		vrd := model.ValidateRulesToValidatePolicyRenderData(list)
+	case *policyv1alpha1.ValidateRuleTemplate:
+		vrd := model.ValidateRulesToValidatePolicyRenderData(tmpl)
 		b, err := p.validateTemplateManager.Render(vrd)
 		if err != nil {
 			return nil, err
@@ -269,27 +278,27 @@ func (p *policyInterrupterImpl) renderAndFormat(data any) (b []byte, err error) 
 	return nil, errors.New("unknown data type")
 }
 
-func (p *policyInterrupterImpl) validateClusterValidatePolicy(obj *policyv1alpha1.ClusterValidatePolicy) (admission.Response, error) {
+func (p *policyInterrupterImpl) validateClusterValidatePolicy(obj *policyv1alpha1.ClusterValidatePolicy) error {
 	for _, validateRule := range obj.Spec.ValidateRules {
 		if validateRule.Template == nil || len(validateRule.RenderedCue) == 0 {
 			continue
 		}
 		if err := p.cueManager.Validate([]byte(validateRule.RenderedCue), nil); err != nil {
-			return admission.Denied(err.Error()), nil
+			return err
 		}
 	}
 
-	return admission.Allowed("ok"), nil
+	return nil
 }
 
-func (p *policyInterrupterImpl) validateOverridePolicy(objSpec *policyv1alpha1.OverridePolicySpec) (admission.Response, error) {
+func (p *policyInterrupterImpl) validateOverridePolicy(objSpec *policyv1alpha1.OverridePolicySpec) error {
 	for _, overrideRule := range objSpec.OverrideRules {
 		if err := p.cueManager.Validate([]byte(overrideRule.Overriders.RenderedCue), nil); err != nil {
-			return admission.Denied(err.Error()), nil
+			return err
 		}
 	}
 
-	return admission.Allowed("ok"), nil
+	return nil
 }
 
 // applyJSONPatch applies the override on to the given unstructured object.

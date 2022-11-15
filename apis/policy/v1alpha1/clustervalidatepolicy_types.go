@@ -51,18 +51,39 @@ type ValidateRuleWithOperation struct {
 	// if there are any data added manually will be erased.
 	// Note: template and podAvailableBadge are **MUTUALLY EXCLUSIVE**, template is priority to take effect.
 	// +optional
-	Template *TemplateCondition `json:"template,omitempty"`
-
-	// PodAvailableBadge represents rule for a group pods available/unavailable number.
-	// It also rendered to cue and stores in renderedCue field and execute it in run-time.
-	// +optional
-	PodAvailableBadge *PodAvailableBadge `json:"podAvailableBadge,omitempty"`
+	Template *ValidateRuleTemplate `json:"template,omitempty"`
 
 	// RenderedCue represents validate rule defined by Template.
 	// Don't modify the value of this field, modify Rules instead of.
 	// +optional
 	RenderedCue string `json:"renderedCue,omitempty"`
 }
+
+// ValidateRuleTemplate defines template for validate rule
+type ValidateRuleTemplate struct {
+	// Type represents current rule operate field type.
+	// +kubebuilder:validation:Enum=general;pab
+	// +required
+	Type ValidateRuleType `json:"type,omitempty"`
+	// Condition represents general condition rule for more custom demand.
+	// +optional
+	Condition *ValidateCondition `json:"condition,omitempty"`
+	// PodAvailableBadge stores the number or percentage to make sure a group pod won't down to zero replica.
+	// +optional
+	PodAvailableBadge *PodAvailableBadge `json:"podAvailableBadge,omitempty"`
+}
+
+// ValidateRuleType is definition for type of single validate rule template
+// +kubebuilder:validation:Enum=general;pab
+type ValidateRuleType string
+
+const (
+	// ValidateRuleTypeCondition - general rule type
+	ValidateRuleTypeCondition = "condition"
+	// ValidateRuleTypePodAvailableBadge - rule of pod available badge
+	ValidateRuleTypePodAvailableBadge = "pab"
+	// add more types here...
+)
 
 // Cond is validation condition for validator
 // +kubebuilder:validation:Enum=Equal;NotEqual;Exist;NotExist;In;NotIn;Gt;Gte;Lt;Lte
@@ -104,7 +125,7 @@ const (
 	AffectModeAllow = "allow"
 )
 
-type TemplateCondition struct {
+type ValidateCondition struct {
 	// AffectMode represents the mode of policy hit affect, in default case(reject), webhook rejects the operation when
 	// policy hit, otherwise it will allow the operation.
 	// If mode is `allow`, only allow the operation when policy hit, otherwise reject them all.
@@ -124,12 +145,43 @@ type TemplateCondition struct {
 	Message string `json:"message,omitempty"`
 	// Value sets exact value for rule, like enum or numbers
 	// +optional
-	Value *CustomTypes `json:"value,omitempty"`
+	Value *ConstantValue `json:"value,omitempty"`
 	// ValueRef represents for value reference from current or remote object.
 	// Need specify the type of object and how to get it.
 	// +optional
 	ValueRef *ResourceRefer `json:"valueRef,omitempty"`
+	// ValueProcess represents handle process for value or valueRef.
+	// Currently only support for number value, so make sure value or value from remote is a number.
+	// +optional
+	ValueProcess *ValueProcess `json:"valueProcess,omitempty"`
 }
+
+// ValueProcess defines operation to handle value to compare.
+// E.g. operation: '*'
+// 		operationWith: 50%  # or 0.5
+type ValueProcess struct {
+	// Operation defines the type of operate value, and it should work with operationWith.
+	// For example, operation is `*` and operationWith is 0.5 then in cue the value will be multiplied by 0.5.
+	// +required
+	Operation OperationType `json:"operation,omitempty"` // such as `+ - * /`
+	// OperationWith defines value for operate to handle static value or value from remote.
+	// +required
+	OperationWith *intstr.IntOrString `json:"operationWith,omitempty"`
+}
+
+// OperationType defines the type of processing value.
+type OperationType string
+
+const (
+	// OperationTypeAdd represents add(+) operate
+	OperationTypeAdd = "+"
+	// OperationTypeSub represents sub(-) operate
+	OperationTypeSub = "-"
+	// OperationTypeMultiply represents multiply(*) operate
+	OperationTypeMultiply = "*"
+	// OperationTypeDivide represents divide(/) operate
+	OperationTypeDivide = "/"
+)
 
 type PodAvailableBadge struct {
 	// MaxUnavailable sets the percentage or number of max unavailable pod of workload.
@@ -141,11 +193,35 @@ type PodAvailableBadge struct {
 	// e.g. if sets 40% and workload replicas is 5, then minAvailable is 2.
 	// +optional
 	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty"`
-	// OwnerReference represents owner of current pod, in default case no need to set this field since
+	// ReplicaReference represents owner of current pod, in default case no need to set this field since
 	// in most of the cases we can get replicas of owner workload. But in some cases, pod might run without
 	// owner workload, so it need to get replicas from some other resource or remote api.
 	// +optional
-	OwnerReference *ResourceRefer `json:"ownerReference,omitempty"`
+	ReplicaReference *ReplicaResourceRefer `json:"replicaReference,omitempty"`
+}
+
+// ReplicaResourceRefer defines different types of replica ref data
+type ReplicaResourceRefer struct {
+	// From represents where this referenced object are.
+	// +kubebuilder:validation:Enum=current;old;k8s;owner;http
+	// +required
+	From ValueRefFrom `json:"from,omitempty"`
+	// TargetReplicaPath represents the path of target replica field from k8s resource or http response.
+	// For k8s resource, usually put "/spec/replica"
+	// For http resource, put something like "body.data.targetReplica"
+	// +optional
+	TargetReplicaPath string `json:"targetReplicaPath,omitempty"`
+	// CurrentReplicaPath represents the path of current replica field from k8s resource or http response.
+	// For k8s resource, usually put "/status/replica"
+	// For http resource, put something like "body.data.currentReplica"
+	// +optional
+	CurrentReplicaPath string `json:"currentReplicaPath,omitempty"`
+	// K8s means refer another object from current cluster.
+	// +optional
+	K8s *ResourceSelector `json:"k8s,omitempty"`
+	// Http means refer data from remote api.
+	// +optional
+	Http *HttpDataRef `json:"http,omitempty"`
 }
 
 // +genclient

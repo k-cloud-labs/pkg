@@ -398,9 +398,9 @@ func TestBuildCueParamsViaOverridePolicy(t *testing.T) {
 		return
 	}
 	type args struct {
-		c          dynamicclient.IDynamicClient
-		curObject  *unstructured.Unstructured
-		overriders *policyv1alpha1.Overriders
+		c         dynamicclient.IDynamicClient
+		curObject *unstructured.Unstructured
+		tmpl      *policyv1alpha1.OverrideRuleTemplate
 	}
 	tests := []struct {
 		name    string
@@ -413,16 +413,14 @@ func TestBuildCueParamsViaOverridePolicy(t *testing.T) {
 			args: args{
 				c:         dc,
 				curObject: pod,
-				overriders: &policyv1alpha1.Overriders{
-					Template: &policyv1alpha1.TemplateRule{
-						ValueRef: &policyv1alpha1.ResourceRefer{
-							From: policyv1alpha1.FromK8s,
-							K8s: &policyv1alpha1.ResourceSelector{
-								APIVersion: "apps/v1",
-								Kind:       "Deployment",
-								Namespace:  "{{metadata.namespace}}",
-								Name:       "{{metadata.annotations.deploy-name}}",
-							},
+				tmpl: &policyv1alpha1.OverrideRuleTemplate{
+					ValueRef: &policyv1alpha1.ResourceRefer{
+						From: policyv1alpha1.FromK8s,
+						K8s: &policyv1alpha1.ResourceSelector{
+							APIVersion: "apps/v1",
+							Kind:       "Deployment",
+							Namespace:  "{{metadata.namespace}}",
+							Name:       "{{metadata.annotations.deploy-name}}",
 						},
 					},
 				},
@@ -439,11 +437,9 @@ func TestBuildCueParamsViaOverridePolicy(t *testing.T) {
 			args: args{
 				c:         dc,
 				curObject: pod,
-				overriders: &policyv1alpha1.Overriders{
-					Template: &policyv1alpha1.TemplateRule{
-						ValueRef: &policyv1alpha1.ResourceRefer{
-							From: policyv1alpha1.FromOwnerReference,
-						},
+				tmpl: &policyv1alpha1.OverrideRuleTemplate{
+					ValueRef: &policyv1alpha1.ResourceRefer{
+						From: policyv1alpha1.FromOwnerReference,
 					},
 				},
 			},
@@ -459,16 +455,14 @@ func TestBuildCueParamsViaOverridePolicy(t *testing.T) {
 			args: args{
 				c:         dc,
 				curObject: pod,
-				overriders: &policyv1alpha1.Overriders{
-					Template: &policyv1alpha1.TemplateRule{
-						ValueRef: &policyv1alpha1.ResourceRefer{
-							From: policyv1alpha1.FromHTTP,
-							Http: &policyv1alpha1.HttpDataRef{
-								URL:    "http://127.0.0.1:8090/api/v1/token",
-								Method: "GET",
-								Params: map[string]string{
-									"val": "{{metadata.name}}",
-								},
+				tmpl: &policyv1alpha1.OverrideRuleTemplate{
+					ValueRef: &policyv1alpha1.ResourceRefer{
+						From: policyv1alpha1.FromHTTP,
+						Http: &policyv1alpha1.HttpDataRef{
+							URL:    "http://127.0.0.1:8090/api/v1/token",
+							Method: "GET",
+							Params: map[string]string{
+								"val": "{{metadata.name}}",
 							},
 						},
 					},
@@ -486,7 +480,7 @@ func TestBuildCueParamsViaOverridePolicy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := BuildCueParamsViaOverridePolicy(tt.args.c, tt.args.curObject, tt.args.overriders)
+			got, err := BuildCueParamsViaOverridePolicy(tt.args.c, tt.args.curObject, tt.args.tmpl)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("BuildCueParamsViaOverridePolicy() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -549,7 +543,7 @@ func TestBuildCueParamsViaValidatePolicy(t *testing.T) {
 	type args struct {
 		c         dynamicclient.IDynamicClient
 		curObject *unstructured.Unstructured
-		condition *policyv1alpha1.TemplateCondition
+		condition *policyv1alpha1.ValidateRuleTemplate
 		keySuffix string
 	}
 	tests := []struct {
@@ -563,14 +557,17 @@ func TestBuildCueParamsViaValidatePolicy(t *testing.T) {
 			args: args{
 				c:         dc,
 				curObject: pod,
-				condition: &policyv1alpha1.TemplateCondition{
-					ValueRef: &policyv1alpha1.ResourceRefer{
-						From: policyv1alpha1.FromK8s,
-						K8s: &policyv1alpha1.ResourceSelector{
-							APIVersion: "apps/v1",
-							Kind:       "Deployment",
-							Namespace:  "{{metadata.namespace}}",
-							Name:       "{{metadata.annotations.deploy-name}}",
+				condition: &policyv1alpha1.ValidateRuleTemplate{
+					Type: policyv1alpha1.ValidateRuleTypeCondition,
+					Condition: &policyv1alpha1.ValidateCondition{
+						ValueRef: &policyv1alpha1.ResourceRefer{
+							From: policyv1alpha1.FromK8s,
+							K8s: &policyv1alpha1.ResourceSelector{
+								APIVersion: "apps/v1",
+								Kind:       "Deployment",
+								Namespace:  "{{metadata.namespace}}",
+								Name:       "{{metadata.annotations.deploy-name}}",
+							},
 						},
 					},
 				},
@@ -587,9 +584,12 @@ func TestBuildCueParamsViaValidatePolicy(t *testing.T) {
 			args: args{
 				c:         dc,
 				curObject: pod,
-				condition: &policyv1alpha1.TemplateCondition{
-					ValueRef: &policyv1alpha1.ResourceRefer{
-						From: policyv1alpha1.FromOwnerReference,
+				condition: &policyv1alpha1.ValidateRuleTemplate{
+					Type: policyv1alpha1.ValidateRuleTypeCondition,
+					Condition: &policyv1alpha1.ValidateCondition{
+						ValueRef: &policyv1alpha1.ResourceRefer{
+							From: policyv1alpha1.FromOwnerReference,
+						},
 					},
 				},
 			},
@@ -605,14 +605,17 @@ func TestBuildCueParamsViaValidatePolicy(t *testing.T) {
 			args: args{
 				c:         dc,
 				curObject: pod,
-				condition: &policyv1alpha1.TemplateCondition{
-					ValueRef: &policyv1alpha1.ResourceRefer{
-						From: policyv1alpha1.FromHTTP,
-						Http: &policyv1alpha1.HttpDataRef{
-							URL:    "http://127.0.0.1:8090/api/v1/token",
-							Method: "GET",
-							Params: map[string]string{
-								"val": "{{metadata.name}}",
+				condition: &policyv1alpha1.ValidateRuleTemplate{
+					Type: policyv1alpha1.ValidateRuleTypeCondition,
+					Condition: &policyv1alpha1.ValidateCondition{
+						ValueRef: &policyv1alpha1.ResourceRefer{
+							From: policyv1alpha1.FromHTTP,
+							Http: &policyv1alpha1.HttpDataRef{
+								URL:    "http://127.0.0.1:8090/api/v1/token",
+								Method: "GET",
+								Params: map[string]string{
+									"val": "{{metadata.name}}",
+								},
 							},
 						},
 					},
@@ -633,14 +636,17 @@ func TestBuildCueParamsViaValidatePolicy(t *testing.T) {
 				keySuffix: "_d",
 				c:         dc,
 				curObject: pod,
-				condition: &policyv1alpha1.TemplateCondition{
-					DataRef: &policyv1alpha1.ResourceRefer{
-						From: policyv1alpha1.FromK8s,
-						K8s: &policyv1alpha1.ResourceSelector{
-							APIVersion: "apps/v1",
-							Kind:       "Deployment",
-							Namespace:  "{{metadata.namespace}}",
-							Name:       "{{metadata.annotations.deploy-name}}",
+				condition: &policyv1alpha1.ValidateRuleTemplate{
+					Type: policyv1alpha1.ValidateRuleTypeCondition,
+					Condition: &policyv1alpha1.ValidateCondition{
+						DataRef: &policyv1alpha1.ResourceRefer{
+							From: policyv1alpha1.FromK8s,
+							K8s: &policyv1alpha1.ResourceSelector{
+								APIVersion: "apps/v1",
+								Kind:       "Deployment",
+								Namespace:  "{{metadata.namespace}}",
+								Name:       "{{metadata.annotations.deploy-name}}",
+							},
 						},
 					},
 				},
@@ -658,9 +664,12 @@ func TestBuildCueParamsViaValidatePolicy(t *testing.T) {
 				keySuffix: "_d",
 				c:         dc,
 				curObject: pod,
-				condition: &policyv1alpha1.TemplateCondition{
-					DataRef: &policyv1alpha1.ResourceRefer{
-						From: policyv1alpha1.FromOwnerReference,
+				condition: &policyv1alpha1.ValidateRuleTemplate{
+					Type: policyv1alpha1.ValidateRuleTypeCondition,
+					Condition: &policyv1alpha1.ValidateCondition{
+						DataRef: &policyv1alpha1.ResourceRefer{
+							From: policyv1alpha1.FromOwnerReference,
+						},
 					},
 				},
 			},
@@ -677,14 +686,17 @@ func TestBuildCueParamsViaValidatePolicy(t *testing.T) {
 				keySuffix: "_d",
 				c:         dc,
 				curObject: pod,
-				condition: &policyv1alpha1.TemplateCondition{
-					DataRef: &policyv1alpha1.ResourceRefer{
-						From: policyv1alpha1.FromHTTP,
-						Http: &policyv1alpha1.HttpDataRef{
-							URL:    "http://127.0.0.1:8090/api/v1/token",
-							Method: "GET",
-							Params: map[string]string{
-								"val": "{{metadata.name}}",
+				condition: &policyv1alpha1.ValidateRuleTemplate{
+					Type: policyv1alpha1.ValidateRuleTypeCondition,
+					Condition: &policyv1alpha1.ValidateCondition{
+						DataRef: &policyv1alpha1.ResourceRefer{
+							From: policyv1alpha1.FromHTTP,
+							Http: &policyv1alpha1.HttpDataRef{
+								URL:    "http://127.0.0.1:8090/api/v1/token",
+								Method: "GET",
+								Params: map[string]string{
+									"val": "{{metadata.name}}",
+								},
 							},
 						},
 					},

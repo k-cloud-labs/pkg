@@ -1,8 +1,6 @@
 package validatemanager
 
 import (
-	"fmt"
-
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -128,19 +126,7 @@ func (m *validateManagerImpl) applyValidatePolicy(cvp *policyv1alpha1.ClusterVal
 }
 
 func (m *validateManagerImpl) executeRenderedCue(params *cue.CueParams, rule *policyv1alpha1.ValidateRuleWithOperation, cvpName string) (*ValidateResult, error) {
-	var (
-		extraParams *cue.CueParams
-		err         error
-	)
-
-	if rule.Template != nil {
-		extraParams, err = cue.BuildCueParamsViaValidatePolicy(m.dynamicClient, params.Object, rule.Template)
-	} else if rule.PodAvailableBadge != nil {
-		// support pab
-		extraParams, err = cue.BuildCueParamsViaValidatePAB(m.dynamicClient, params.Object, rule.PodAvailableBadge)
-	} else {
-		return nil, fmt.Errorf("invalid validate policy")
-	}
+	extraParams, err := cue.BuildCueParamsViaValidatePolicy(m.dynamicClient, params.Object, rule.Template)
 	if err != nil {
 		klog.ErrorS(err, "Failed to build validate policy params.",
 			"validatepolicy", cvpName, "resource", klog.KObj(params.Object))
@@ -158,7 +144,9 @@ func (m *validateManagerImpl) executeRenderedCue(params *cue.CueParams, rule *po
 		return nil, err
 	}
 
-	if rule.Template != nil && rule.Template.AffectMode == policyv1alpha1.AffectModeAllow {
+	if rule.Template != nil &&
+		rule.Template.Condition != nil &&
+		rule.Template.Condition.AffectMode == policyv1alpha1.AffectModeAllow {
 		// if valid is true -> not match current policy -> reject operation
 		// if valid is false -> matches policy -> allow operation
 		result.Valid = !result.Valid

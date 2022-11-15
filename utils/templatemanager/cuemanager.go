@@ -19,7 +19,7 @@ type CueManager interface {
 	Format(src []byte, opts ...format.Option) (result []byte, err error)
 	// Validate - check the cue whether valid or not, it returns error if it's invalid
 	// Same as running `cue vet xxx.cue -c`
-	Validate(src []byte, data any, opts ...cue.Option) error
+	Validate(src []byte, opts ...cue.Option) error
 	// DryRun - calculate/render cue with given data.
 	// Same as running `cue eval xxx.cue`
 	DryRun(src []byte, data any, outputField string) (result []byte, err error)
@@ -61,7 +61,7 @@ func (c *cueManagerImpl) Format(src []byte, opts ...format.Option) (result []byt
 	return res, nil
 }
 
-func (c *cueManagerImpl) Validate(src []byte, data any, opts ...cue.Option) error {
+func (c *cueManagerImpl) Validate(src []byte, opts ...cue.Option) error {
 	validateOptions := opts
 	if len(opts) == 0 {
 		validateOptions = []cue.Option{
@@ -79,23 +79,6 @@ func (c *cueManagerImpl) Validate(src []byte, data any, opts ...cue.Option) erro
 
 	if err = bi.AddSyntax(fs); err != nil {
 		return err
-	}
-
-	if data != nil {
-		bt, err := json.Marshal(data)
-		if err != nil {
-			return err
-		}
-
-		paramFile := fmt.Sprintf("data: %s", string(bt))
-		fs, err = parser.ParseFile("parameter", paramFile)
-		if err != nil {
-			return err
-		}
-
-		if err = bi.AddSyntax(fs); err != nil {
-			return err
-		}
 	}
 
 	value := cuecontext.New().BuildInstance(bi)

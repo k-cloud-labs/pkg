@@ -9,14 +9,11 @@ import (
 )
 
 // NewValidateTemplateManager init validate policy template manager
-func NewValidateTemplateManager(filePath string) (TemplateManager, error) {
-	t, err := NewTemplateManager(
-		&TemplateSource{
-			FilePath:     filePath,
-			TemplateName: "BaseTemplate",
-		}, template.FuncMap{
+func NewValidateTemplateManager(ts *TemplateSource) (TemplateManager, error) {
+	t, err := NewTemplateManager(ts,
+		template.FuncMap{
 			"convertConstValue": func(v interface{}) string {
-				val := v.(*policyv1alpha1.CustomTypes)
+				val := v.(*policyv1alpha1.ConstantValue)
 				if val.String != nil {
 					return fmt.Sprintf("\"%s\"", *val.String)
 				}
@@ -25,7 +22,7 @@ func NewValidateTemplateManager(filePath string) (TemplateManager, error) {
 			},
 
 			"convertSliceValue": func(v interface{}) string {
-				val := v.(*policyv1alpha1.CustomTypes)
+				val := v.(*policyv1alpha1.ConstantValue)
 				if slice := val.GetSlice(); len(slice) > 0 {
 					b, _ := json.Marshal(slice)
 					return string(b)

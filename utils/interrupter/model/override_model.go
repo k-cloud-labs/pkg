@@ -13,7 +13,7 @@ import (
 )
 
 type OverridePolicyRenderData struct {
-	Type      policyv1alpha1.RuleType
+	Type      policyv1alpha1.OverrideRuleType
 	Op        policyv1alpha1.OverriderOperator
 	Path      string
 	Value     any
@@ -42,7 +42,7 @@ func (mrd *OverridePolicyRenderData) String() string {
 	return buf.String()
 }
 
-func OverrideRulesToOverridePolicyRenderData(or *policyv1alpha1.TemplateRule) *OverridePolicyRenderData {
+func OverrideRulesToOverridePolicyRenderData(or *policyv1alpha1.OverrideRuleTemplate) *OverridePolicyRenderData {
 	nr := &OverridePolicyRenderData{
 		Type:              or.Type,
 		Op:                or.Operation,
@@ -55,9 +55,9 @@ func OverrideRulesToOverridePolicyRenderData(or *policyv1alpha1.TemplateRule) *O
 		Affinity:          or.Affinity,
 	}
 	switch or.Type {
-	case policyv1alpha1.RuleTypeAnnotations:
+	case policyv1alpha1.OverrideRuleTypeAnnotations:
 		fallthrough
-	case policyv1alpha1.RuleTypeLabels:
+	case policyv1alpha1.OverrideRuleTypeLabels:
 		nr.ValueType = policyv1alpha1.ValueTypeRefer
 		if or.Value != nil {
 			nr.ValueType = policyv1alpha1.ValueTypeConst
@@ -82,7 +82,7 @@ func OverrideRulesToOverridePolicyRenderData(or *policyv1alpha1.TemplateRule) *O
 
 			nr.ValueRef = vr
 		}
-	case policyv1alpha1.RuleTypeResourcesOversell:
+	case policyv1alpha1.OverrideRuleTypeResourcesOversell:
 		if or.ResourcesOversell != nil {
 			if !or.ResourcesOversell.CpuFactor.ValidFactor() &&
 				!or.ResourcesOversell.MemoryFactor.ValidFactor() &&

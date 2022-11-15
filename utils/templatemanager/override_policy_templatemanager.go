@@ -13,12 +13,8 @@ import (
 )
 
 // NewOverrideTemplateManager init override policy template manager.
-func NewOverrideTemplateManager(filePath string) (TemplateManager, error) {
-	t, err := NewTemplateManager(
-		&TemplateSource{
-			FilePath:     filePath,
-			TemplateName: "BaseTemplate",
-		},
+func NewOverrideTemplateManager(ts *TemplateSource) (TemplateManager, error) {
+	t, err := NewTemplateManager(ts,
 		template.FuncMap{
 			"marshal": func(v interface{}) string {
 				buf := &bytes.Buffer{}
@@ -68,17 +64,17 @@ func NewOverrideTemplateManager(filePath string) (TemplateManager, error) {
 
 func validateOp(rule *model.OverridePolicyRenderData) bool {
 	switch rule.Type {
-	case policyv1alpha1.RuleTypeAnnotations:
+	case policyv1alpha1.OverrideRuleTypeAnnotations:
 		return true
-	case policyv1alpha1.RuleTypeLabels:
+	case policyv1alpha1.OverrideRuleTypeLabels:
 		return true
-	case policyv1alpha1.RuleTypeResourcesOversell:
+	case policyv1alpha1.OverrideRuleTypeResourcesOversell:
 		return rule.ResourcesOversell != nil
-	case policyv1alpha1.RuleTypeResources:
+	case policyv1alpha1.OverrideRuleTypeResources:
 		return rule.Resources != nil
-	case policyv1alpha1.RuleTypeTolerations:
+	case policyv1alpha1.OverrideRuleTypeTolerations:
 		return true
-	case policyv1alpha1.RuleTypeAffinity:
+	case policyv1alpha1.OverrideRuleTypeAffinity:
 		return validateAffinity(rule)
 	}
 

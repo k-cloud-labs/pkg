@@ -216,11 +216,11 @@ patches: [{
 		return &s
 	}
 	overriders4 := policyv1alpha1.Overriders{
-		Template: &policyv1alpha1.TemplateRule{
-			Type:      policyv1alpha1.RuleTypeAnnotations,
+		Template: &policyv1alpha1.OverrideRuleTemplate{
+			Type:      policyv1alpha1.OverrideRuleTypeAnnotations,
 			Operation: policyv1alpha1.OverriderOpReplace,
 			Path:      "owned-by",
-			Value:     &policyv1alpha1.CustomTypes{String: stringPtr("template-cue")},
+			Value:     &policyv1alpha1.ConstantValue{String: stringPtr("template-cue")},
 		},
 		RenderedCue: `
 data:      _ @tag(data)

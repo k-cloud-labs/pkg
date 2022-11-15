@@ -1,3 +1,7 @@
+package templates
+
+// ValidateTemplate -
+var ValidateTemplate = `
 {{define "BaseTemplate"}}
     {{- /*gotype:github.com/k-cloud-labs/pkg/utils/interrupter/model.ValidatePolicyRenderData*/ -}}
 	{{if and (eq .Type "condition") (.Condition)}}
@@ -137,3 +141,4 @@ validate:{
 	}
 }
 {{end}}
+`

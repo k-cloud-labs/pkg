@@ -66,9 +66,12 @@ validate: {
 			ValidateRules: []policyv1alpha1.ValidateRuleWithOperation{
 				{
 					TargetOperations: []admissionv1.Operation{admissionv1.Delete},
-					Template: &policyv1alpha1.TemplateCondition{
-						Cond:    policyv1alpha1.CondExist,
-						Message: "cannot delete this ns",
+					Template: &policyv1alpha1.ValidateRuleTemplate{
+						Type: policyv1alpha1.ValidateRuleTypeCondition,
+						Condition: &policyv1alpha1.ValidateCondition{
+							Cond:    policyv1alpha1.CondExist,
+							Message: "cannot delete this ns",
+						},
 					},
 					RenderedCue: `
 data:      _ @tag(data)

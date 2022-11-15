@@ -95,7 +95,7 @@ type Overriders struct {
 	// it will be rendered to CUE and store in RenderedCue field, so
 	//if there are any data added manually will be erased.
 	// +optional
-	Template *TemplateRule `json:"template,omitempty"`
+	Template *OverrideRuleTemplate `json:"template,omitempty"`
 
 	// RenderedCue represents override rule defined by Template.
 	// Don't modify the value of this field, modify Rules instead of.
@@ -103,24 +103,24 @@ type Overriders struct {
 	RenderedCue string `json:"renderedCue,omitempty"`
 }
 
-// RuleType is definition for type of single rule
+// OverrideRuleType is definition for type of single override rule template
 // +kubebuilder:validation:Enum=annotations;labels;resourcesOversell;resources;affinity;tolerations
-type RuleType string
+type OverrideRuleType string
 
 // The valid RuleTypes
 const (
-	// RuleTypeAnnotations - `annotations`
-	RuleTypeAnnotations RuleType = "annotations"
-	// RuleTypeLabels - `labels`
-	RuleTypeLabels RuleType = "labels"
-	// RuleTypeResourcesOversell - `resourcesOversell`
-	RuleTypeResourcesOversell RuleType = "resourcesOversell"
-	// RuleTypeResources - `resources`
-	RuleTypeResources RuleType = "resources"
-	// RuleTypeAffinity - `affinity`
-	RuleTypeAffinity RuleType = "affinity"
-	// RuleTypeTolerations - `tolerations`
-	RuleTypeTolerations RuleType = "tolerations"
+	// OverrideRuleTypeAnnotations - `annotations`
+	OverrideRuleTypeAnnotations OverrideRuleType = "annotations"
+	// OverrideRuleTypeLabels - `labels`
+	OverrideRuleTypeLabels OverrideRuleType = "labels"
+	// OverrideRuleTypeResourcesOversell - `resourcesOversell`
+	OverrideRuleTypeResourcesOversell OverrideRuleType = "resourcesOversell"
+	// OverrideRuleTypeResources - `resources`
+	OverrideRuleTypeResources OverrideRuleType = "resources"
+	// OverrideRuleTypeAffinity - `affinity`
+	OverrideRuleTypeAffinity OverrideRuleType = "affinity"
+	// OverrideRuleTypeTolerations - `tolerations`
+	OverrideRuleTypeTolerations OverrideRuleType = "tolerations"
 )
 
 // ValueType defines whether value is specified by user or refer from other object
@@ -152,12 +152,12 @@ const (
 	FromHTTP ValueRefFrom = "http"
 )
 
-// TemplateRule represents a single template of rule definition
-type TemplateRule struct {
+// OverrideRuleTemplate represents a single template of rule definition
+type OverrideRuleTemplate struct {
 	// Type represents current rule operate field type.
 	// +kubebuilder:validation:Enum=annotations;labels;resources;resourcesOversell;tolerations;affinity
 	// +required
-	Type RuleType `json:"type,omitempty"`
+	Type OverrideRuleType `json:"type,omitempty"`
 	// Operation represents current operation type.
 	// +kubebuilder:validation:Enum=add;replace;remove
 	// +required
@@ -167,8 +167,9 @@ type TemplateRule struct {
 	// +optional
 	Path string `json:"path,omitempty"`
 	// Value sets exact value for rule, like enum or numbers
+	// Must set value when type is regex.
 	// +optional
-	Value *CustomTypes `json:"value,omitempty"`
+	Value *ConstantValue `json:"value,omitempty"`
 	// ValueRef represents for value reference from current or remote object.
 	// Need specify the type of object and how to get it.
 	// +optional
@@ -259,8 +260,8 @@ func (f Float64) ToFloat64() *float64 {
 	return &f64
 }
 
-// CustomTypes defines exact types. Only one of field can be set.
-type CustomTypes struct {
+// ConstantValue defines exact types. Only one of field can be set.
+type ConstantValue struct {
 	// String as a string
 	// +optional
 	String *string `json:"string,omitempty"`
@@ -288,7 +289,7 @@ type CustomTypes struct {
 }
 
 // Value return first non-nil value, it returns nil if all fields are empty.
-func (t *CustomTypes) Value() any {
+func (t *ConstantValue) Value() any {
 	if t == nil {
 		return nil
 	}
@@ -328,7 +329,7 @@ func (t *CustomTypes) Value() any {
 	return nil
 }
 
-func (t *CustomTypes) GetSlice() []any {
+func (t *ConstantValue) GetSlice() []any {
 	if t == nil {
 		return nil
 	}

@@ -1216,7 +1216,7 @@ spec:
                               type: string
                             value:
                               description: Value sets exact value for rule, like enum
-                                or numbers
+                                or numbers Must set value when type is regex.
                               properties:
                                 boolean:
                                   description: Boolean only true or false can be recognized.
