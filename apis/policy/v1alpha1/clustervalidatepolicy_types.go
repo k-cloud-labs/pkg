@@ -62,7 +62,7 @@ type ValidateRuleWithOperation struct {
 // ValidateRuleTemplate defines template for validate rule
 type ValidateRuleTemplate struct {
 	// Type represents current rule operate field type.
-	// +kubebuilder:validation:Enum=general;pab
+	// +kubebuilder:validation:Enum=condition;pab
 	// +required
 	Type ValidateRuleType `json:"type,omitempty"`
 	// Condition represents general condition rule for more custom demand.
@@ -74,7 +74,7 @@ type ValidateRuleTemplate struct {
 }
 
 // ValidateRuleType is definition for type of single validate rule template
-// +kubebuilder:validation:Enum=general;pab
+// +kubebuilder:validation:Enum=condition;pab
 type ValidateRuleType string
 
 const (
