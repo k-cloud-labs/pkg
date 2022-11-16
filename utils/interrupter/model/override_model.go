@@ -48,7 +48,6 @@ func OverrideRulesToOverridePolicyRenderData(or *policyv1alpha1.OverrideRuleTemp
 		Op:                or.Operation,
 		Value:             or.Value.Value(),
 		Path:              handlePath(or.Path),
-		ValueRef:          &ResourceRefer{},
 		Resources:         or.Resources,
 		ResourcesOversell: or.ResourcesOversell,
 		Tolerations:       or.Tolerations,

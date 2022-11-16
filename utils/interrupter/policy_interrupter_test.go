@@ -3,6 +3,8 @@ package interrupter
 import (
 	"testing"
 
+	jsonpatchv2 "gomodules.xyz/jsonpatch/v2"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
@@ -121,6 +123,143 @@ func Test_policyInterrupterImpl_renderAndFormat(t *testing.T) {
 			}
 
 			t.Logf("cue >>>\n%v", string(gotB))
+		})
+	}
+}
+
+func Test_convertToPolicy(t *testing.T) {
+	type args struct {
+		u    *unstructured.Unstructured
+		data any
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "1",
+			args: args{
+				u: &unstructured.Unstructured{Object: map[string]interface{}{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "OverridePolicy",
+				}},
+				data: &policyv1alpha1.OverridePolicy{},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := convertToPolicy(tt.args.u, tt.args.data); (err != nil) != tt.wantErr {
+				t.Errorf("convertToPolicy() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func Test_applyJSONPatch(t *testing.T) {
+	type args struct {
+		obj       *unstructured.Unstructured
+		overrides []jsonpatchv2.JsonPatchOperation
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "1",
+			args: args{
+				obj: &unstructured.Unstructured{Object: map[string]interface{}{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "OverridePolicy",
+				}},
+				overrides: []jsonpatchv2.JsonPatchOperation{
+					{
+						Operation: "add",
+						Path:      "/kind",
+						Value:     "ClusterOverridePolicy",
+					},
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := applyJSONPatch(tt.args.obj, tt.args.overrides); (err != nil) != tt.wantErr {
+				t.Errorf("applyJSONPatch() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func Test_policyInterrupterImpl_OnValidating(t *testing.T) {
+	mtm, err := templatemanager.NewOverrideTemplateManager(&templatemanager.TemplateSource{
+		Content:      templates.OverrideTemplate,
+		TemplateName: "BaseTemplate",
+	})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	vtm, err := templatemanager.NewValidateTemplateManager(&templatemanager.TemplateSource{
+		Content:      templates.ValidateTemplate,
+		TemplateName: "BaseTemplate",
+	})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	policyInterrupter := NewPolicyInterrupter(mtm, vtm, templatemanager.NewCueManager())
+
+	type args struct {
+		obj    *unstructured.Unstructured
+		oldObj *unstructured.Unstructured
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "1",
+			args: args{
+				obj: &unstructured.Unstructured{Object: map[string]interface{}{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "OverridePolicy",
+					"spec": map[string]interface{}{
+						"overrideRules": []map[string]interface{}{
+							{
+								"overriders": map[string]interface{}{
+									"renderedCue": `
+ data:      _ @tag(data)
+object:    data.object
+oldObject: data.oldObject
+validate: {
+	if object.metadata.annotations."no-delete" != _|_ {
+		valid:  false
+		reason: "cannot delete this ns"
+	}
+}
+`,
+								},
+							},
+						},
+					},
+				}},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := policyInterrupter.OnValidating(tt.args.obj, tt.args.oldObj); (err != nil) != tt.wantErr {
+				t.Errorf("OnValidating() error = %v, wantErr %v", err, tt.wantErr)
+			}
 		})
 	}
 }

@@ -283,7 +283,7 @@ func (p *policyInterrupterImpl) validateClusterValidatePolicy(obj *policyv1alpha
 		if validateRule.Template == nil || len(validateRule.RenderedCue) == 0 {
 			continue
 		}
-		if err := p.cueManager.Validate([]byte(validateRule.RenderedCue), nil); err != nil {
+		if err := p.cueManager.Validate([]byte(validateRule.RenderedCue)); err != nil {
 			return err
 		}
 	}
@@ -293,7 +293,7 @@ func (p *policyInterrupterImpl) validateClusterValidatePolicy(obj *policyv1alpha
 
 func (p *policyInterrupterImpl) validateOverridePolicy(objSpec *policyv1alpha1.OverridePolicySpec) error {
 	for _, overrideRule := range objSpec.OverrideRules {
-		if err := p.cueManager.Validate([]byte(overrideRule.Overriders.RenderedCue), nil); err != nil {
+		if err := p.cueManager.Validate([]byte(overrideRule.Overriders.RenderedCue)); err != nil {
 			return err
 		}
 	}
