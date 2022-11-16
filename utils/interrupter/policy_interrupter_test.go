@@ -1,6 +1,7 @@
 package interrupter
 
 import (
+	"reflect"
 	"testing"
 
 	jsonpatchv2 "gomodules.xyz/jsonpatch/v2"
@@ -254,11 +255,338 @@ validate: {
 			},
 			wantErr: false,
 		},
+		{
+			name: "2",
+			args: args{
+				obj: &unstructured.Unstructured{Object: map[string]interface{}{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterOverridePolicy",
+					"spec": map[string]interface{}{
+						"overrideRules": []map[string]interface{}{
+							{
+								"overriders": map[string]interface{}{
+									"renderedCue": `
+ data:      _ @tag(data)
+object:    data.object
+oldObject: data.oldObject
+validate: {
+	if object.metadata.annotations."no-delete" != _|_ {
+		valid:  false
+		reason: "cannot delete this ns"
+	}
+}
+`,
+								},
+							},
+						},
+					},
+				}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "3",
+			args: args{
+				obj: &unstructured.Unstructured{Object: map[string]interface{}{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]interface{}{
+						"validateRules": []map[string]interface{}{
+							{
+								"renderedCue": `
+ data:      _ @tag(data)
+object:    data.object
+oldObject: data.oldObject
+validate: {
+	if object.metadata.annotations."no-delete" != _|_ {
+		valid:  false
+		reason: "cannot delete this ns"
+	}
+}
+`,
+							},
+						},
+					},
+				}},
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if err := policyInterrupter.OnValidating(tt.args.obj, tt.args.oldObj); (err != nil) != tt.wantErr {
 				t.Errorf("OnValidating() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func Test_policyInterrupterImpl_OnMutating(t *testing.T) {
+	mtm, err := templatemanager.NewOverrideTemplateManager(&templatemanager.TemplateSource{
+		Content:      templates.OverrideTemplate,
+		TemplateName: "BaseTemplate",
+	})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	vtm, err := templatemanager.NewValidateTemplateManager(&templatemanager.TemplateSource{
+		Content:      templates.ValidateTemplate,
+		TemplateName: "BaseTemplate",
+	})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	policyInterrupter := NewPolicyInterrupter(mtm, vtm, templatemanager.NewCueManager())
+
+	type args struct {
+		obj    *unstructured.Unstructured
+		oldObj *unstructured.Unstructured
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    []jsonpatchv2.JsonPatchOperation
+		wantErr bool
+	}{
+		{
+			name: "1",
+			args: args{
+				obj: &unstructured.Unstructured{Object: map[string]interface{}{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "OverridePolicy",
+					"spec": map[string]interface{}{
+						"overrideRules": []map[string]interface{}{
+							{
+								"overriders": map[string]interface{}{
+									"template": map[string]interface{}{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"value": map[string]interface{}{
+											"string": "cue",
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want: []jsonpatchv2.JsonPatchOperation{
+				{
+					Operation: "replace",
+					Path:      "/spec/overrideRules/0/overriders/renderedCue",
+					Value: `import (
+    "strings"
+    "strconv"
+    "math"
+    "list"
+)
+
+data:      _ @tag(data)
+object:    data.object
+kind:      object.kind
+oldObject: data.oldObject
+unFlattenPatches: [
+    if object.metadata.annotations == _|_ {
+        {
+            op:   "replace"
+            path: "/metadata/annotations"
+            value: {}
+        }
+    },
+    // annotations
+    {
+        op:    "replace"
+        path:  "/metadata/annotations/add-by"
+        value: "cue"
+    },
+]
+patches: list.FlattenN(unFlattenPatches, -1)
+`,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "2",
+			args: args{
+				obj: &unstructured.Unstructured{Object: map[string]interface{}{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterOverridePolicy",
+					"spec": map[string]interface{}{
+						"overrideRules": []map[string]interface{}{
+							{
+								"overriders": map[string]interface{}{
+									"template": map[string]interface{}{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"value": map[string]interface{}{
+											"string": "cue",
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want: []jsonpatchv2.JsonPatchOperation{
+				{
+					Operation: "replace",
+					Path:      "/spec/overrideRules/0/overriders/renderedCue",
+					Value: `import (
+    "strings"
+    "strconv"
+    "math"
+    "list"
+)
+
+data:      _ @tag(data)
+object:    data.object
+kind:      object.kind
+oldObject: data.oldObject
+unFlattenPatches: [
+    if object.metadata.annotations == _|_ {
+        {
+            op:   "replace"
+            path: "/metadata/annotations"
+            value: {}
+        }
+    },
+    // annotations
+    {
+        op:    "replace"
+        path:  "/metadata/annotations/add-by"
+        value: "cue"
+    },
+]
+patches: list.FlattenN(unFlattenPatches, -1)
+`,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "3",
+			args: args{
+				obj: &unstructured.Unstructured{Object: map[string]interface{}{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]interface{}{
+						"validateRules": []map[string]interface{}{
+							{
+								"template": map[string]interface{}{
+									"type": "condition",
+									"condition": map[string]interface{}{
+										"message": "forbidden",
+										"cond":    "Gte",
+										"dataRef": map[string]interface{}{
+											"from": "current",
+											"path": "/spec/replica",
+										},
+										"value": map[string]interface{}{
+											"integer": 1,
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want: []jsonpatchv2.JsonPatchOperation{
+				{
+					Operation: "replace",
+					Path:      "/spec/validateRules/0/template/condition/affectMode",
+					Value:     "reject",
+				},
+				{
+					Operation: "replace",
+					Path:      "/spec/validateRules/0/renderedCue",
+					Value: `data:      _ @tag(data)
+object:    data.object
+oldObject: data.oldObject
+validate: {
+    if object.spec.replica != _|_ {
+        if object.spec.replica >= 1 {
+            valid:  false
+            reason: "forbidden"
+        }
+    }
+}
+`,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "4",
+			args: args{
+				obj: &unstructured.Unstructured{Object: map[string]interface{}{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]interface{}{
+						"validateRules": []map[string]interface{}{
+							{
+								"template": map[string]interface{}{
+									"type": "pab",
+									"podAvailableBadge": map[string]interface{}{
+										"maxUnavailable": "60%",
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want: []jsonpatchv2.JsonPatchOperation{
+				{
+					Operation: "replace",
+					Path:      "/spec/validateRules/0/template/podAvailableBadge/replicaReference",
+					Value:     `{"from":"owner","targetReplicaPath":"/spec/replica","currentReplicaPath":"/status/replica"}`,
+				},
+				{
+					Operation: "replace",
+					Path:      "/spec/validateRules/0/renderedCue",
+					Value: `data:        _ @tag(data)
+object:      data.object
+oldObject:   data.oldObject
+otherObject: data.extraParams."otherObject"
+validate: {
+    if otherObject.spec.replica != _|_ {
+        if otherObject.status.replica != _|_ {
+            // target - target * 0.6 > current
+            if otherObject.spec.replica-otherObject.spec.replica*0.6 > status.replica-1 {
+                {
+                    valid:  false
+                    reason: "Cannot delete this pod, cause of hitting maxUnavailable(0.6)"
+                }
+            }
+        }
+    }
+}
+`,
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			got, err := policyInterrupter.OnMutating(tt.args.obj, tt.args.oldObj)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("OnMutating() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("OnMutating() got = %+v, want %+v", got, tt.want)
 			}
 		})
 	}

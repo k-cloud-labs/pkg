@@ -211,10 +211,14 @@ func (p *policyInterrupterImpl) patchClusterValidatePolicy(obj *policyv1alpha1.C
 				CurrentReplicaPath: "/status/replica",
 			}
 
+			b, err := json.Marshal(validateRule.Template.PodAvailableBadge.ReplicaReference)
+			if err != nil {
+				return nil, err
+			}
 			patches = append(patches, jsonpatchv2.JsonPatchOperation{
 				Operation: "replace",
 				Path:      fmt.Sprintf("/spec/validateRules/%d/template/podAvailableBadge/replicaReference", i),
-				Value:     validateRule.Template.PodAvailableBadge.ReplicaReference,
+				Value:     string(b),
 			})
 		}
 

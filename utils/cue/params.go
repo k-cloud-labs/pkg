@@ -2,7 +2,6 @@ package cue
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -17,7 +16,7 @@ import (
 	"k8s.io/klog/v2"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
-	"github.com/k-cloud-labs/pkg/utils/dynamicclient"
+	"github.com/k-cloud-labs/pkg/utils/dynamiclister"
 )
 
 type CueParams struct {
@@ -27,7 +26,7 @@ type CueParams struct {
 	ExtraParams map[string]any `json:"extraParams"`
 }
 
-func BuildCueParamsViaOverridePolicy(c dynamicclient.IDynamicClient, curObject *unstructured.Unstructured, tmpl *policyv1alpha1.OverrideRuleTemplate) (*CueParams, error) {
+func BuildCueParamsViaOverridePolicy(c dynamiclister.DynamicResourceLister, curObject *unstructured.Unstructured, tmpl *policyv1alpha1.OverrideRuleTemplate) (*CueParams, error) {
 	var (
 		cp = &CueParams{
 			ExtraParams: make(map[string]any),
@@ -62,7 +61,7 @@ func BuildCueParamsViaOverridePolicy(c dynamicclient.IDynamicClient, curObject *
 	return cp, nil
 }
 
-func BuildCueParamsViaValidatePolicy(c dynamicclient.IDynamicClient, curObject *unstructured.Unstructured, tmpl *policyv1alpha1.ValidateRuleTemplate) (*CueParams, error) {
+func BuildCueParamsViaValidatePolicy(c dynamiclister.DynamicResourceLister, curObject *unstructured.Unstructured, tmpl *policyv1alpha1.ValidateRuleTemplate) (*CueParams, error) {
 	switch tmpl.Type {
 	case policyv1alpha1.ValidateRuleTypeCondition:
 		return buildCueParamsForValidateCondition(c, curObject, tmpl.Condition)
@@ -73,7 +72,7 @@ func BuildCueParamsViaValidatePolicy(c dynamicclient.IDynamicClient, curObject *
 	}
 }
 
-func buildCueParamsForValidateCondition(c dynamicclient.IDynamicClient, curObject *unstructured.Unstructured, condition *policyv1alpha1.ValidateCondition) (*CueParams, error) {
+func buildCueParamsForValidateCondition(c dynamiclister.DynamicResourceLister, curObject *unstructured.Unstructured, condition *policyv1alpha1.ValidateCondition) (*CueParams, error) {
 	var cp = &CueParams{
 		ExtraParams: make(map[string]any),
 	}
@@ -132,7 +131,7 @@ func buildCueParamsForValidateCondition(c dynamicclient.IDynamicClient, curObjec
 	return cp, nil
 }
 
-func buildCueParamsForPAB(c dynamicclient.IDynamicClient, curObject *unstructured.Unstructured, pab *policyv1alpha1.PodAvailableBadge) (*CueParams, error) {
+func buildCueParamsForPAB(c dynamiclister.DynamicResourceLister, curObject *unstructured.Unstructured, pab *policyv1alpha1.PodAvailableBadge) (*CueParams, error) {
 	var cp = &CueParams{
 		ExtraParams: make(map[string]any),
 	}
@@ -166,12 +165,10 @@ func buildCueParamsForPAB(c dynamicclient.IDynamicClient, curObject *unstructure
 	return cp, nil
 }
 
-func getObject(c dynamicclient.IDynamicClient, obj *unstructured.Unstructured, rs *policyv1alpha1.ResourceSelector) (*unstructured.Unstructured, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
+func getObject(c dynamiclister.DynamicResourceLister, obj *unstructured.Unstructured, rs *policyv1alpha1.ResourceSelector) (*unstructured.Unstructured, error) {
 	gvk := schema.FromAPIVersionAndKind(rs.APIVersion, rs.Kind)
 
-	rc, err := c.GetResourceClientByGVK(gvk)
+	lister, err := c.GVKToResourceLister(gvk)
 	if err != nil {
 		klog.ErrorS(err, "GetGroupVersionResource got error",
 			"apiVersion", rs.APIVersion, "kind", rs.Kind, "name", rs.Name)
@@ -189,12 +186,12 @@ func getObject(c dynamicclient.IDynamicClient, obj *unstructured.Unstructured, r
 		}
 
 		klog.V(4).InfoS("get owner reference", "apiVersion", rs.APIVersion, "kind", rs.Kind, "name", refName)
-		obj, err := rc.Namespace(refNs).Get(ctx, refName, metav1.GetOptions{})
+		obj, err := lister.ByNamespace(refNs).Get(refName)
 		if err != nil {
 			return nil, err
 		}
 
-		return obj, nil
+		return obj.(*unstructured.Unstructured), nil
 	}
 
 	if rs.LabelSelector != nil {
@@ -209,16 +206,14 @@ func getObject(c dynamicclient.IDynamicClient, obj *unstructured.Unstructured, r
 		}
 
 		klog.V(4).InfoS("get object", "label", s.String())
-		list, err := rc.Namespace(rs.Namespace).List(ctx, metav1.ListOptions{
-			LabelSelector: s.String(),
-		})
+		list, err := lister.ByNamespace(rs.Namespace).List(s)
 		if err != nil {
 			return nil, err
 		}
 
-		klog.V(4).InfoS("list by label", "list", list.Items, "obj", list.Object)
-		if len(list.Items) > 0 {
-			return &list.Items[0], nil
+		klog.V(4).InfoS("list by label", "list", list)
+		if len(list) > 0 {
+			return list[0].(*unstructured.Unstructured), nil
 		}
 	}
 
@@ -228,7 +223,7 @@ func getObject(c dynamicclient.IDynamicClient, obj *unstructured.Unstructured, r
 func handleRefSelectLabels(ls *metav1.LabelSelector, obj *unstructured.Unstructured) (*metav1.LabelSelector, error) {
 	result := &metav1.LabelSelector{
 		MatchLabels:      make(map[string]string),
-		MatchExpressions: make([]metav1.LabelSelectorRequirement, 0),
+		MatchExpressions: make([]metav1.LabelSelectorRequirement, len(ls.MatchExpressions)),
 	}
 	for k, v := range ls.MatchLabels {
 		refVal, err := parseAndGetRefValue(v, obj)
@@ -239,7 +234,7 @@ func handleRefSelectLabels(ls *metav1.LabelSelector, obj *unstructured.Unstructu
 		result.MatchLabels[k] = refVal
 	}
 
-	for _, expression := range ls.MatchExpressions {
+	for i, expression := range ls.MatchExpressions {
 		var values []string
 		for _, value := range expression.Values {
 			refVal, err := parseAndGetRefValue(value, obj)
@@ -250,19 +245,17 @@ func handleRefSelectLabels(ls *metav1.LabelSelector, obj *unstructured.Unstructu
 			values = append(values, refVal)
 		}
 
-		result.MatchExpressions = append(result.MatchExpressions, metav1.LabelSelectorRequirement{
+		result.MatchExpressions[i] = metav1.LabelSelectorRequirement{
 			Key:      expression.Key,
 			Operator: expression.Operator,
 			Values:   values,
-		})
+		}
 	}
 
 	return result, nil
 }
 
-func getOwnerReference(c dynamicclient.IDynamicClient, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
+func getOwnerReference(c dynamiclister.DynamicResourceLister, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	list := obj.GetOwnerReferences()
 	if len(list) == 0 {
 		return nil, errors.New("object has no owner reference")
@@ -272,13 +265,18 @@ func getOwnerReference(c dynamicclient.IDynamicClient, obj *unstructured.Unstruc
 	gvk := schema.FromAPIVersionAndKind(or.APIVersion, or.Kind)
 	klog.V(4).InfoS("get owner reference", "apiVersion", or.APIVersion, "kind", or.Kind, "name", or.Name)
 
-	rc, err := c.GetResourceClientByGVK(gvk)
+	lister, err := c.GVKToResourceLister(gvk)
 	if err != nil {
 		klog.ErrorS(err, "GetGroupVersionResource got error", "apiVersion", or.APIVersion, "kind", or.Kind, "name", or.Name)
 		return nil, err
 	}
 
-	return rc.Namespace(obj.GetNamespace()).Get(ctx, or.Name, metav1.GetOptions{})
+	result, err := lister.ByNamespace(obj.GetNamespace()).Get(or.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	return result.(*unstructured.Unstructured), nil
 }
 
 func getHttpResponse(c *http.Client, obj *unstructured.Unstructured, ref *policyv1alpha1.HttpDataRef) (map[string]any, error) {

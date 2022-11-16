@@ -1,6 +1,7 @@
 package cue
 
 import (
+	"context"
 	"net/http"
 	"reflect"
 	"testing"
@@ -8,10 +9,11 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
-	"github.com/k-cloud-labs/pkg/utils/dynamicclient"
-	fakeDC "github.com/k-cloud-labs/pkg/utils/dynamicclient/fake"
+	"github.com/k-cloud-labs/pkg/utils/dynamiclister"
+	fakedl "github.com/k-cloud-labs/pkg/utils/dynamiclister/fake"
 )
 
 func newEmptyObj() *unstructured.Unstructured {
@@ -105,7 +107,7 @@ func Test_handleRefSelectLabels(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "normal",
+			name: "label",
 			args: args{
 				ls: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -121,6 +123,38 @@ func Test_handleRefSelectLabels(t *testing.T) {
 					"ns":   "ns",
 				},
 				MatchExpressions: make([]metav1.LabelSelectorRequirement, 0),
+			},
+			wantErr: false,
+		},
+		{
+			name: "expression",
+			args: args{
+				ls: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "name",
+							Operator: metav1.LabelSelectorOpIn,
+							Values: []string{
+								"{{metadata.name}}",
+								"{{metadata.namespace}}",
+							},
+						},
+					},
+				},
+				obj: newBasicObj("name", "ns"),
+			},
+			want: &metav1.LabelSelector{
+				MatchLabels: make(map[string]string),
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{
+						Key:      "name",
+						Operator: metav1.LabelSelectorOpIn,
+						Values: []string{
+							"name",
+							"ns",
+						},
+					},
+				},
 			},
 			wantErr: false,
 		},
@@ -200,6 +234,8 @@ func Test_getHttpResponse(t *testing.T) {
 }
 
 func Test_getOwnerReference(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	deploy := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -221,13 +257,13 @@ func Test_getOwnerReference(t *testing.T) {
 			Name:       "deploy",
 		},
 	})
-	dc, err := fakeDC.NewSimpleDynamicClient(deploy)
+	dc, err := fakedl.NewFakeDynamicResourceLister(ctx.Done(), deploy)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	type args struct {
-		c   dynamicclient.IDynamicClient
+		c   dynamiclister.DynamicResourceLister
 		obj *unstructured.Unstructured
 	}
 	tests := []struct {
@@ -274,6 +310,8 @@ func equalObj(o1, o2 *unstructured.Unstructured) bool {
 }
 
 func Test_getObject(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	deploy := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -301,13 +339,13 @@ func Test_getObject(t *testing.T) {
 			Name:       "deploy",
 		},
 	})
-	dc, err := fakeDC.NewSimpleDynamicClient(deploy)
+	dc, err := fakedl.NewFakeDynamicResourceLister(ctx.Done(), deploy)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	type args struct {
-		c   dynamicclient.IDynamicClient
+		c   dynamiclister.DynamicResourceLister
 		obj *unstructured.Unstructured
 		rs  *policyv1alpha1.ResourceSelector
 	}
@@ -366,6 +404,8 @@ func Test_getObject(t *testing.T) {
 }
 
 func TestBuildCueParamsViaOverridePolicy(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	s := newMockHttpServer()
 	defer s.Close()
 	deploy := &appsv1.Deployment{
@@ -392,13 +432,13 @@ func TestBuildCueParamsViaOverridePolicy(t *testing.T) {
 			Name:       "deploy",
 		},
 	})
-	dc, err := fakeDC.NewSimpleDynamicClient(deploy)
+	dc, err := fakedl.NewFakeDynamicResourceLister(ctx.Done(), deploy)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	type args struct {
-		c         dynamicclient.IDynamicClient
+		c         dynamiclister.DynamicResourceLister
 		curObject *unstructured.Unstructured
 		tmpl      *policyv1alpha1.OverrideRuleTemplate
 	}
@@ -535,13 +575,15 @@ func TestBuildCueParamsViaValidatePolicy(t *testing.T) {
 			Name:       "deploy",
 		},
 	})
-	dc, err := fakeDC.NewSimpleDynamicClient(deploy)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dc, err := fakedl.NewFakeDynamicResourceLister(ctx.Done(), deploy)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	type args struct {
-		c         dynamicclient.IDynamicClient
+		c         dynamiclister.DynamicResourceLister
 		curObject *unstructured.Unstructured
 		condition *policyv1alpha1.ValidateRuleTemplate
 		keySuffix string
@@ -705,6 +747,96 @@ func TestBuildCueParamsViaValidatePolicy(t *testing.T) {
 			want: &CueParams{
 				ExtraParams: map[string]any{
 					"http_d": map[string]any{
+						"body": "{\"token\":\"pod\"}",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "pab_owner",
+			args: args{
+				c:         dc,
+				curObject: pod,
+				condition: &policyv1alpha1.ValidateRuleTemplate{
+					Type: policyv1alpha1.ValidateRuleTypePodAvailableBadge,
+					PodAvailableBadge: &policyv1alpha1.PodAvailableBadge{
+						MaxUnavailable: &intstr.IntOrString{
+							Type:   intstr.String,
+							StrVal: "60%",
+						},
+						ReplicaReference: &policyv1alpha1.ReplicaResourceRefer{
+							From: policyv1alpha1.FromOwnerReference,
+						},
+					},
+				},
+			},
+			want: &CueParams{
+				ExtraParams: map[string]any{
+					"otherObject": deployObj,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "pab_k8s",
+			args: args{
+				c:         dc,
+				curObject: pod,
+				condition: &policyv1alpha1.ValidateRuleTemplate{
+					Type: policyv1alpha1.ValidateRuleTypePodAvailableBadge,
+					PodAvailableBadge: &policyv1alpha1.PodAvailableBadge{
+						MaxUnavailable: &intstr.IntOrString{
+							Type:   intstr.String,
+							StrVal: "60%",
+						},
+						ReplicaReference: &policyv1alpha1.ReplicaResourceRefer{
+							From: policyv1alpha1.FromK8s,
+							K8s: &policyv1alpha1.ResourceSelector{
+								APIVersion: "apps/v1",
+								Kind:       "Deployment",
+								Namespace:  "{{metadata.namespace}}",
+								Name:       "{{metadata.annotations.deploy-name}}",
+							},
+						},
+					},
+				},
+			},
+			want: &CueParams{
+				ExtraParams: map[string]any{
+					"otherObject": deployObj,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "pab_http",
+			args: args{
+				c:         dc,
+				curObject: pod,
+				condition: &policyv1alpha1.ValidateRuleTemplate{
+					Type: policyv1alpha1.ValidateRuleTypePodAvailableBadge,
+					PodAvailableBadge: &policyv1alpha1.PodAvailableBadge{
+						MaxUnavailable: &intstr.IntOrString{
+							Type:   intstr.String,
+							StrVal: "60%",
+						},
+						ReplicaReference: &policyv1alpha1.ReplicaResourceRefer{
+							From: policyv1alpha1.FromHTTP,
+							Http: &policyv1alpha1.HttpDataRef{
+								URL:    "http://127.0.0.1:8090/api/v1/token",
+								Method: "GET",
+								Params: map[string]string{
+									"val": "{{metadata.name}}",
+								},
+							},
+						},
+					},
+				},
+			},
+			want: &CueParams{
+				ExtraParams: map[string]any{
+					"http": map[string]any{
 						"body": "{\"token\":\"pod\"}",
 					},
 				},

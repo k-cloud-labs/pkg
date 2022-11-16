@@ -16,7 +16,7 @@ import (
 	"github.com/k-cloud-labs/pkg/client/listers/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/utils"
 	"github.com/k-cloud-labs/pkg/utils/cue"
-	"github.com/k-cloud-labs/pkg/utils/dynamicclient"
+	"github.com/k-cloud-labs/pkg/utils/dynamiclister"
 	"github.com/k-cloud-labs/pkg/utils/util"
 )
 
@@ -55,12 +55,12 @@ type policyOverriders struct {
 }
 
 type overrideManagerImpl struct {
-	dynamicClient *dynamicclient.DynamicClient
+	dynamicClient dynamiclister.DynamicResourceLister
 	opLister      v1alpha1.OverridePolicyLister
 	copLister     v1alpha1.ClusterOverridePolicyLister
 }
 
-func NewOverrideManager(dynamicClient *dynamicclient.DynamicClient, copLister v1alpha1.ClusterOverridePolicyLister, opLister v1alpha1.OverridePolicyLister) OverrideManager {
+func NewOverrideManager(dynamicClient dynamiclister.DynamicResourceLister, copLister v1alpha1.ClusterOverridePolicyLister, opLister v1alpha1.OverridePolicyLister) OverrideManager {
 	return &overrideManagerImpl{
 		dynamicClient: dynamicClient,
 		opLister:      opLister,

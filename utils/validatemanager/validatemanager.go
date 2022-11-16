@@ -10,7 +10,7 @@ import (
 	"github.com/k-cloud-labs/pkg/client/listers/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/utils"
 	"github.com/k-cloud-labs/pkg/utils/cue"
-	"github.com/k-cloud-labs/pkg/utils/dynamicclient"
+	"github.com/k-cloud-labs/pkg/utils/dynamiclister"
 	"github.com/k-cloud-labs/pkg/utils/util"
 )
 
@@ -21,7 +21,7 @@ type ValidateManager interface {
 }
 
 type validateManagerImpl struct {
-	dynamicClient *dynamicclient.DynamicClient
+	dynamicClient dynamiclister.DynamicResourceLister
 	cvpLister     v1alpha1.ClusterValidatePolicyLister
 }
 
@@ -30,7 +30,7 @@ type ValidateResult struct {
 	Valid  bool   `json:"valid"`
 }
 
-func NewValidateManager(dynamicClient *dynamicclient.DynamicClient, cvpLister v1alpha1.ClusterValidatePolicyLister) ValidateManager {
+func NewValidateManager(dynamicClient dynamiclister.DynamicResourceLister, cvpLister v1alpha1.ClusterValidatePolicyLister) ValidateManager {
 	return &validateManagerImpl{
 		dynamicClient: dynamicClient,
 		cvpLister:     cvpLister,
