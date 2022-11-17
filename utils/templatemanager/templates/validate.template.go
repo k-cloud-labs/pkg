@@ -102,7 +102,7 @@ validate:{
 		{{if .MaxUnavailable}}
 			{{if .IsPercentage}}
 				// target - target * {{.MaxUnavailable}} > current
-				if {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.TargetReplicaPath}} - {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.TargetReplicaPath}} * {{.MaxUnavailable}} > {{.ReplicaReference.CurrentReplicaPath}} - 1 {
+				if {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.TargetReplicaPath}} - {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.TargetReplicaPath}} * {{.MaxUnavailable}} > {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.CurrentReplicaPath}} - 1 {
 					{
 						valid: false
 						reason: "Cannot delete this pod, cause of hitting maxUnavailable({{.MaxUnavailable}})"
@@ -110,7 +110,7 @@ validate:{
 				}
 			{{else}}
 				// target - {{.MaxUnavailable}} > current
-				if {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.TargetReplicaPath}} - {{.MaxUnavailable}} > {{.ReplicaReference.CurrentReplicaPath}} - 1 {
+				if {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.TargetReplicaPath}} - {{.MaxUnavailable}} > {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.CurrentReplicaPath}} - 1 {
 					{
 						valid: false
 						reason: "Cannot delete this pod, cause of hitting maxUnavailable({{.MaxUnavailable}})"
@@ -121,7 +121,7 @@ validate:{
 			{{/*minAvailable*/}}
             {{if .IsPercentage}}
 				// target * {{.MinAvailable}} > current
-				if {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.TargetReplicaPath}} * {{.MinAvailable}} > {{.ReplicaReference.CurrentReplicaPath}} - 1 {
+				if {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.TargetReplicaPath}} * {{.MinAvailable}} > {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.CurrentReplicaPath}} - 1 {
 					{
 						valid: false
 						reason: "Cannot delete this pod, cause of hitting minAvailable({{.MinAvailable}})"
@@ -129,7 +129,7 @@ validate:{
 				}
             {{else}}
 				// {{.MinAvailable}} > current
-				if {{.MinAvailable}} > {{.ReplicaReference.CurrentReplicaPath}} - 1 {
+				if {{.MinAvailable}} > {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.CurrentReplicaPath}} - 1 {
 					{
 						valid: false
 						reason: "Cannot delete this pod, cause of hitting maxUnavailable({{.MinAvailable}})"
