@@ -2,6 +2,7 @@ package cue
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -279,17 +280,42 @@ func getOwnerReference(c dynamiclister.DynamicResourceLister, obj *unstructured.
 	return result.(*unstructured.Unstructured), nil
 }
 
+// See shouldCopyHeaderOnRedirect https://golang.org/src/net/http/client.go
+var secHeaders = []string{"Authorization", "Www-Authenticate", "Cookie", "Cookie2"}
+
+var ErrTooManyRedirects = errors.New("too many redirects")
+
+// support direct
+var defaultHTTPClient = &http.Client{
+	Timeout: time.Second,
+	// Workaround security behavior in client where it may
+	// discard certain security-related header on redirect.
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) > 10 {
+			// Emulate default redirect check.
+			return ErrTooManyRedirects
+		}
+		if len(via) > 0 {
+			for _, header := range secHeaders {
+				if req.Header.Get(header) == "" {
+					req.Header.Set(header, via[len(via)-1].Header.Get(header))
+				}
+			}
+		}
+
+		return nil
+	},
+}
+
 func getHttpResponse(c *http.Client, obj *unstructured.Unstructured, ref *policyv1alpha1.HttpDataRef) (map[string]any, error) {
 	if c == nil {
-		c = &http.Client{
-			Transport: http.DefaultTransport,
-			Timeout:   time.Second * 3,
-		}
+		c = defaultHTTPClient
 	}
 
 	var (
-		query = url.Values{}
-		body  io.Reader
+		params string
+		query  = url.Values{}
+		body   io.Reader
 	)
 	for k, v := range ref.Params {
 		refVal, err := parseAndGetRefValue(v, obj)
@@ -303,12 +329,26 @@ func getHttpResponse(c *http.Client, obj *unstructured.Unstructured, ref *policy
 		body = bytes.NewBuffer(ref.Body.Raw)
 	}
 
-	req, err := http.NewRequest(ref.Method, ref.URL+"?"+query.Encode(), body)
+	if len(ref.Params) > 0 {
+		params = "?" + query.Encode()
+	}
+
+	req, err := http.NewRequest(ref.Method, ref.URL+params, body)
 	if err != nil {
 		return nil, err
 	}
 	for k, v := range ref.Header {
-		req.Header.Add(k, v)
+		req.Header.Set(k, v)
+	}
+
+	// check if request need auth
+	if ref.TokenAuth != nil {
+		token, err := httpAuth(c, ref.TokenAuth)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
 	resp, err := c.Do(req)
@@ -327,6 +367,46 @@ func getHttpResponse(c *http.Client, obj *unstructured.Unstructured, ref *policy
 		"header":  resp.Header,
 		"trailer": resp.Trailer,
 	}, nil
+}
+
+type Auth struct {
+	Token string `json:"token"`
+}
+
+func httpAuth(hc *http.Client, a *policyv1alpha1.HttpRequestAuth) (token string, err error) {
+	if a == nil {
+		return "", errors.New("invalid auth")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, a.AuthURL, nil)
+	if err != nil {
+		return "", nil
+	}
+	req.SetBasicAuth(a.Username, a.Password)
+
+	resp, err := hc.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer noErr(resp.Body.Close)
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	// got error
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("request auth token error, url=%v, statusCode=%v, respBody=%v",
+			a.AuthURL, resp.StatusCode, string(bodyBytes))
+	}
+
+	auth := new(Auth)
+	if err = json.Unmarshal(bodyBytes, auth); err != nil {
+		return
+	}
+
+	return auth.Token, nil
 }
 
 func noErr(f func() error) {

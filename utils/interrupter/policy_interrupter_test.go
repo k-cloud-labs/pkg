@@ -551,8 +551,8 @@ validate: {
 					Path:      "/spec/validateRules/0/template/podAvailableBadge/replicaReference",
 					Value: &policyv1alpha1.ReplicaResourceRefer{
 						From:               policyv1alpha1.FromOwnerReference,
-						TargetReplicaPath:  "/spec/replica",
-						CurrentReplicaPath: "/status/replica",
+						TargetReplicaPath:  "/spec/replicas",
+						CurrentReplicaPath: "/status/replicas",
 					},
 				},
 				{
@@ -563,10 +563,10 @@ object:      data.object
 oldObject:   data.oldObject
 otherObject: data.extraParams."otherObject"
 validate: {
-    if otherObject.spec.replica != _|_ {
-        if otherObject.status.replica != _|_ {
+    if otherObject.spec.replicas != _|_ {
+        if otherObject.status.replicas != _|_ {
             // target - target * 0.6 > current
-            if otherObject.spec.replica-otherObject.spec.replica*0.6 > otherObject.status.replica-1 {
+            if otherObject.spec.replicas-otherObject.spec.replicas*0.6 > otherObject.status.replicas-1 {
                 {
                     valid:  false
                     reason: "Cannot delete this pod, cause of hitting maxUnavailable(0.6)"

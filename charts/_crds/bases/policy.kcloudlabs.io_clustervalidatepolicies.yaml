@@ -229,6 +229,31 @@ spec:
                                       description: Method as basic http method(e.g.
                                         GET or POST)
                                       type: string
+                                    oAuth2:
+                                      description: 'TokenAuth defines basic info for
+                                        get authorization token before do request.
+                                        Note: it will request authURL with post and
+                                        `Header.Set("Authorization", "Basic "+basicAuth(username,
+                                        password))` and get token from response body.
+                                        Response Body must be a valid json and contains
+                                        token like this: `{"token": "xxx"} . After
+                                        get the token, the request will add a new
+                                        key value to header, key is "Authorization"
+                                        and value is "Bearer xxx".'
+                                      properties:
+                                        authUrl:
+                                          description: AuthURL represents remote url
+                                            to request and get token.
+                                          type: string
+                                        password:
+                                          description: Password represents Password
+                                            for auth.
+                                          type: string
+                                        username:
+                                          description: Username represents username
+                                            for auth.
+                                          type: string
+                                      type: object
                                     params:
                                       additionalProperties:
                                         type: string
@@ -437,6 +462,31 @@ spec:
                                       description: Method as basic http method(e.g.
                                         GET or POST)
                                       type: string
+                                    oAuth2:
+                                      description: 'TokenAuth defines basic info for
+                                        get authorization token before do request.
+                                        Note: it will request authURL with post and
+                                        `Header.Set("Authorization", "Basic "+basicAuth(username,
+                                        password))` and get token from response body.
+                                        Response Body must be a valid json and contains
+                                        token like this: `{"token": "xxx"} . After
+                                        get the token, the request will add a new
+                                        key value to header, key is "Authorization"
+                                        and value is "Bearer xxx".'
+                                      properties:
+                                        authUrl:
+                                          description: AuthURL represents remote url
+                                            to request and get token.
+                                          type: string
+                                        password:
+                                          description: Password represents Password
+                                            for auth.
+                                          type: string
+                                        username:
+                                          description: Username represents username
+                                            for auth.
+                                          type: string
+                                      type: object
                                     params:
                                       additionalProperties:
                                         type: string
@@ -607,6 +657,31 @@ spec:
                                       description: Method as basic http method(e.g.
                                         GET or POST)
                                       type: string
+                                    oAuth2:
+                                      description: 'TokenAuth defines basic info for
+                                        get authorization token before do request.
+                                        Note: it will request authURL with post and
+                                        `Header.Set("Authorization", "Basic "+basicAuth(username,
+                                        password))` and get token from response body.
+                                        Response Body must be a valid json and contains
+                                        token like this: `{"token": "xxx"} . After
+                                        get the token, the request will add a new
+                                        key value to header, key is "Authorization"
+                                        and value is "Bearer xxx".'
+                                      properties:
+                                        authUrl:
+                                          description: AuthURL represents remote url
+                                            to request and get token.
+                                          type: string
+                                        password:
+                                          description: Password represents Password
+                                            for auth.
+                                          type: string
+                                        username:
+                                          description: Username represents username
+                                            for auth.
+                                          type: string
+                                      type: object
                                     params:
                                       additionalProperties:
                                         type: string

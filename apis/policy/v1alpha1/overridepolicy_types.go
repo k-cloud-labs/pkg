@@ -222,7 +222,26 @@ type HttpDataRef struct {
 	// +optional
 	Params map[string]string `json:"params,omitempty"`
 	// Body represents the json body when http method is POST.
+	// +optional
 	Body apiextensionsv1.JSON `json:"body,omitempty"`
+	// TokenAuth defines basic info for get authorization token before do request.
+	// Note: it will request authURL with post and `Header.Set("Authorization", "Basic "+basicAuth(username, password))`
+	//  and get token from response body. Response Body must be a valid json and contains token like this: `{"token": "xxx"} .
+	//	After get the token, the request will add a new key value to header, key is "Authorization" and value is "Bearer xxx".
+	TokenAuth *HttpRequestAuth `json:"oAuth2,omitempty"`
+}
+
+// HttpRequestAuth defines basic info for get auth token from remote api
+type HttpRequestAuth struct {
+	// Username represents username for auth.
+	// +required
+	Username string `json:"username,omitempty"`
+	// Password represents Password for auth.
+	// +required
+	Password string `json:"password,omitempty"`
+	// AuthURL represents remote url to request and get token.
+	// +required
+	AuthURL string `json:"authUrl,omitempty"`
 }
 
 // ResourcesOversellRule defines factor of resource oversell

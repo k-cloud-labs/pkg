@@ -207,8 +207,8 @@ func (p *policyInterrupterImpl) patchClusterValidatePolicy(obj *policyv1alpha1.C
 			validateRule.Template.PodAvailableBadge.ReplicaReference == nil {
 			validateRule.Template.PodAvailableBadge.ReplicaReference = &policyv1alpha1.ReplicaResourceRefer{
 				From:               policyv1alpha1.FromOwnerReference,
-				TargetReplicaPath:  "/spec/replica",
-				CurrentReplicaPath: "/status/replica",
+				TargetReplicaPath:  "/spec/replicas",
+				CurrentReplicaPath: "/status/replicas",
 			}
 
 			patches = append(patches, jsonpatchv2.JsonPatchOperation{
