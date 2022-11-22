@@ -34,9 +34,9 @@ type FakeClusterOverridePolicies struct {
 	Fake *FakePolicyV1alpha1
 }
 
-var clusteroverridepoliciesResource = schema.GroupVersionResource{Group: "policy", Version: "v1alpha1", Resource: "clusteroverridepolicies"}
+var clusteroverridepoliciesResource = schema.GroupVersionResource{Group: "policy.kcloudlabs.io", Version: "v1alpha1", Resource: "clusteroverridepolicies"}
 
-var clusteroverridepoliciesKind = schema.GroupVersionKind{Group: "policy", Version: "v1alpha1", Kind: "ClusterOverridePolicy"}
+var clusteroverridepoliciesKind = schema.GroupVersionKind{Group: "policy.kcloudlabs.io", Version: "v1alpha1", Kind: "ClusterOverridePolicy"}
 
 // Get takes name of the clusterOverridePolicy, and returns the corresponding clusterOverridePolicy object, and an error if there is any.
 func (c *FakeClusterOverridePolicies) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.ClusterOverridePolicy, err error) {

@@ -35,9 +35,9 @@ type FakeOverridePolicies struct {
 	ns   string
 }
 
-var overridepoliciesResource = schema.GroupVersionResource{Group: "policy", Version: "v1alpha1", Resource: "overridepolicies"}
+var overridepoliciesResource = schema.GroupVersionResource{Group: "policy.kcloudlabs.io", Version: "v1alpha1", Resource: "overridepolicies"}
 
-var overridepoliciesKind = schema.GroupVersionKind{Group: "policy", Version: "v1alpha1", Kind: "OverridePolicy"}
+var overridepoliciesKind = schema.GroupVersionKind{Group: "policy.kcloudlabs.io", Version: "v1alpha1", Kind: "OverridePolicy"}
 
 // Get takes name of the overridePolicy, and returns the corresponding overridePolicy object, and an error if there is any.
 func (c *FakeOverridePolicies) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.OverridePolicy, err error) {

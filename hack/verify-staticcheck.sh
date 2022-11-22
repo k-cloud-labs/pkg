@@ -6,13 +6,14 @@ set -o pipefail
 
 REPO_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
 GOLANGCI_LINT_PKG="github.com/golangci/golangci-lint/cmd/golangci-lint"
-GOLANGCI_LINT_VER="v1.42.1"
+GOLANGCI_LINT_VER="v1.50.1"
 
 cd "${REPO_ROOT}"
 source "hack/util.sh"
 
 util::install_tools ${GOLANGCI_LINT_PKG} ${GOLANGCI_LINT_VER}
-
+# before
+go mod tidy
 if golangci-lint run --timeout=5m; then
   echo 'Congratulations!  All Go source files have passed staticcheck.'
 else

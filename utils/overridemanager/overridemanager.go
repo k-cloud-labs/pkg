@@ -1,6 +1,7 @@
 package overridemanager
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -15,6 +16,7 @@ import (
 	"github.com/k-cloud-labs/pkg/client/listers/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/utils"
 	"github.com/k-cloud-labs/pkg/utils/cue"
+	"github.com/k-cloud-labs/pkg/utils/dynamiclister"
 	"github.com/k-cloud-labs/pkg/utils/util"
 )
 
@@ -26,7 +28,7 @@ type OverrideManager interface {
 	// For namespaced scoped resource, apply order is:
 	// - First apply ClusterOverridePolicy;
 	// - Then apply OverridePolicy;
-	ApplyOverridePolicies(rawObj *unstructured.Unstructured, operation admissionv1.Operation) (appliedCOPs *AppliedOverrides, appliedOPs *AppliedOverrides, err error)
+	ApplyOverridePolicies(rawObj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (appliedCOPs *AppliedOverrides, appliedOPs *AppliedOverrides, err error)
 }
 
 // GeneralOverridePolicy is an abstract object of ClusterOverridePolicy and OverridePolicy
@@ -53,25 +55,27 @@ type policyOverriders struct {
 }
 
 type overrideManagerImpl struct {
-	opLister  v1alpha1.OverridePolicyLister
-	copLister v1alpha1.ClusterOverridePolicyLister
+	dynamicClient dynamiclister.DynamicResourceLister
+	opLister      v1alpha1.OverridePolicyLister
+	copLister     v1alpha1.ClusterOverridePolicyLister
 }
 
-func NewOverrideManager(copLister v1alpha1.ClusterOverridePolicyLister, opLister v1alpha1.OverridePolicyLister) OverrideManager {
+func NewOverrideManager(dynamicClient dynamiclister.DynamicResourceLister, copLister v1alpha1.ClusterOverridePolicyLister, opLister v1alpha1.OverridePolicyLister) OverrideManager {
 	return &overrideManagerImpl{
-		opLister:  opLister,
-		copLister: copLister,
+		dynamicClient: dynamicClient,
+		opLister:      opLister,
+		copLister:     copLister,
 	}
 }
 
-func (o *overrideManagerImpl) ApplyOverridePolicies(rawObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, *AppliedOverrides, error) {
+func (o *overrideManagerImpl) ApplyOverridePolicies(rawObj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, *AppliedOverrides, error) {
 	var (
 		appliedCOPs *AppliedOverrides
 		appliedOPs  *AppliedOverrides
 		err         error
 	)
 
-	appliedCOPs, err = o.applyClusterOverridePolicies(rawObj, operation)
+	appliedCOPs, err = o.applyClusterOverridePolicies(rawObj, oldObj, operation)
 	if err != nil {
 		klog.ErrorS(err, "Failed to apply cluster override policies.")
 		return nil, nil, err
@@ -79,7 +83,7 @@ func (o *overrideManagerImpl) ApplyOverridePolicies(rawObj *unstructured.Unstruc
 
 	if rawObj.GetNamespace() != "" {
 		// Apply namespace scoped override policies
-		appliedOPs, err = o.applyOverridePolicies(rawObj, operation)
+		appliedOPs, err = o.applyOverridePolicies(rawObj, oldObj, operation)
 		if err != nil {
 			klog.ErrorS(err, "Failed to apply override policies.")
 			return nil, nil, err
@@ -89,7 +93,7 @@ func (o *overrideManagerImpl) ApplyOverridePolicies(rawObj *unstructured.Unstruc
 	return appliedCOPs, appliedOPs, nil
 }
 
-func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, error) {
+func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, error) {
 	cops, err := o.copLister.List(labels.Everything())
 	if err != nil {
 		klog.ErrorS(err, "Failed to list cluster override policies.", "resource", klog.KObj(rawObj), "operation", operation)
@@ -97,6 +101,7 @@ func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj *unstructured.
 	}
 
 	if len(cops) == 0 {
+		klog.V(2).InfoS("No cluster override policy in current cluster.")
 		return nil, nil
 	}
 
@@ -113,7 +118,7 @@ func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj *unstructured.
 
 	appliedOverrides := &AppliedOverrides{}
 	for _, p := range matchingPolicyOverriders {
-		if err := applyPolicyOverriders(rawObj, p.overriders); err != nil {
+		if err := o.applyPolicyOverriders(rawObj, oldObj, p.overriders); err != nil {
 			klog.ErrorS(err, "Failed to apply cluster overriders.", "clusteroverridepolicy", p.name, "resource", klog.KObj(rawObj), "operation", operation)
 			return nil, err
 		}
@@ -124,7 +129,7 @@ func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj *unstructured.
 	return appliedOverrides, nil
 }
 
-func (o *overrideManagerImpl) applyOverridePolicies(rawObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, error) {
+func (o *overrideManagerImpl) applyOverridePolicies(rawObj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, error) {
 	ops, err := o.opLister.List(labels.Everything())
 	if err != nil {
 		klog.ErrorS(err, "Failed to list override policies.", "namespace", rawObj.GetNamespace(), "resource", klog.KObj(rawObj), "operation", operation)
@@ -145,12 +150,14 @@ func (o *overrideManagerImpl) applyOverridePolicies(rawObj *unstructured.Unstruc
 		klog.V(2).InfoS("No override policy.", "resource", klog.KObj(rawObj), "operation", operation)
 		return nil, nil
 	}
+	klog.V(4).InfoS("matched override polices", "count", len(ops))
 
 	appliedOverriders := &AppliedOverrides{}
 	for _, p := range matchingPolicyOverriders {
-		if err := applyPolicyOverriders(rawObj, p.overriders); err != nil {
-			klog.ErrorS(err, "Failed to apply overriders.", "overridepolicy", fmt.Sprintf("%s/%s", p.namespace, p.name), "resource", klog.KObj(rawObj), "operation", operation)
-			return nil, err
+		if err := o.applyPolicyOverriders(rawObj, oldObj, p.overriders); err != nil {
+			klog.ErrorS(err, "Failed to apply overriders.",
+				"overridepolicy", fmt.Sprintf("%s/%s", p.namespace, p.name), "resource", klog.KObj(rawObj), "operation", operation)
+			return nil, fmt.Errorf("appling policy(%v/%v) err=%v", p.namespace, p.name, err)
 		}
 		klog.V(2).InfoS("Applied overriders", "overridepolicy", fmt.Sprintf("%s/%s", p.namespace, p.name), "resource", klog.KObj(rawObj), "operation", operation)
 		appliedOverriders.Add(p.name, p.overriders)
@@ -195,7 +202,33 @@ func (o *overrideManagerImpl) getOverridersFromOverridePolicies(policies []Gener
 }
 
 // applyPolicyOverriders applies OverridePolicy/ClusterOverridePolicy overriders to target object
-func applyPolicyOverriders(rawObj *unstructured.Unstructured, overriders policyv1alpha1.Overriders) error {
+func (o *overrideManagerImpl) applyPolicyOverriders(rawObj, oldObj *unstructured.Unstructured, overriders policyv1alpha1.Overriders) error {
+	if overriders.Template != nil && overriders.RenderedCue != "" {
+		p, err := cue.BuildCueParamsViaOverridePolicy(o.dynamicClient, rawObj, overriders.Template)
+		if err != nil {
+			return fmt.Errorf("BuildCueParamsViaOverridePolicy error=%w", err)
+		}
+		p.Object = rawObj
+		p.OldObject = oldObj
+		if p.OldObject == nil {
+			p.OldObject = &unstructured.Unstructured{Object: map[string]interface{}{}}
+		}
+		params := []cue.Parameter{
+			{
+				Object: p,
+				Name:   utils.DataParameterName,
+			},
+		}
+
+		patches, err := executeCueV2(overriders.RenderedCue, params)
+		if err != nil {
+			return err
+		}
+
+		if err := applyJSONPatch(rawObj, patches); err != nil {
+			return err
+		}
+	}
 	if overriders.Cue != "" {
 		patches, err := executeCue(rawObj, overriders.Cue)
 		if err != nil {
@@ -245,6 +278,51 @@ func parseJSONPatchesByPlaintext(overriders []policyv1alpha1.PlaintextOverrider)
 		})
 	}
 	return patches
+}
+
+func executeCueV2(cueStr string, parameters []cue.Parameter) ([]overrideOption, error) {
+	result := make([]overrideOption, 0)
+	if err := cue.CueDoAndReturn(cueStr, parameters, utils.OverrideOutputName, &result); err != nil {
+		klog.ErrorS(err, "execute cue error", "cue", cueStr, "params", parameters)
+		if klog.V(4).Enabled() {
+			buf := &bytes.Buffer{}
+			enc := json.NewEncoder(buf)
+			enc.SetIndent("", "\t")
+
+			if err := enc.Encode(parameters); err != nil {
+				return nil, err
+			}
+			klog.V(4).InfoS("debug parameters", "params", buf.String(), "err", err.Error())
+		}
+		return nil, err
+	}
+
+	if klog.V(4).Enabled() {
+		buf, err := marshalIndent(result)
+		if err != nil {
+			return nil, err
+		}
+
+		buf2, err := marshalIndent(parameters)
+		if err != nil {
+			return nil, err
+		}
+
+		klog.V(4).InfoS("cue execute result", "params", buf2.String(), "results", buf.String())
+	}
+
+	return result, nil
+}
+
+func marshalIndent(v any) (*bytes.Buffer, error) {
+	buf := &bytes.Buffer{}
+	enc := json.NewEncoder(buf)
+	enc.SetIndent("", "\t")
+
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return buf, nil
 }
 
 func executeCue(rawObj *unstructured.Unstructured, template string) (*[]overrideOption, error) {

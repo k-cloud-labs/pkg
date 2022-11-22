@@ -8,54 +8,54 @@ on:
 jobs:
   golangci:
     name: lint
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     steps:
       - name: checkout code
         uses: actions/checkout@v2
       - name: install Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.17.x
+          go-version: 1.18.x
       - name: lint
         run: hack/verify-staticcheck.sh
       - name: import alias
         run: hack/verify-import-aliases.sh
   codegen:
     name: codegen
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     steps:
       - name: checkout code
         uses: actions/checkout@v2
       - name: install Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.17.x
+          go-version: 1.18.x
       - name: verify codegen
         run: hack/verify-codegen.sh
       - name: verify crdgen
         run: hack/verify-crdgen.sh
   fmt:
     name: gofmt
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     steps:
       - name: checkout code
         uses: actions/checkout@v2
       - name: install Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.17.x
+          go-version: 1.18.x
       - name: go fmt check
         run: make fmt-check
   vet:
     name: go vet
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     steps:
       - name: checkout code
         uses: actions/checkout@v2
       - name: install Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.17.x
+          go-version: 1.18.x
       - name: go vet
         run: make vet
   test:
@@ -63,14 +63,14 @@ jobs:
     needs:
       - fmt
       - vet
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     steps:
       - name: checkout code
         uses: actions/checkout@v2
       - name: install Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.17.x
+          go-version: 1.18.x
       - name: Run coverage
         run: ./script/test.sh
       - name: Codecov

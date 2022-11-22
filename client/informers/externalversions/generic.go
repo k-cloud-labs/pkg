@@ -51,7 +51,7 @@ func (f *genericInformer) Lister() cache.GenericLister {
 // TODO extend this to unknown resources with a client pool
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
-	// Group=policy, Version=v1alpha1
+	// Group=policy.kcloudlabs.io, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithResource("clusteroverridepolicies"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Policy().V1alpha1().ClusterOverridePolicies().Informer()}, nil
 	case v1alpha1.SchemeGroupVersion.WithResource("clustervalidatepolicies"):

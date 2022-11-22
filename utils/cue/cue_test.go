@@ -225,14 +225,25 @@ validate:{
 // newMockHttpServer mock the http server
 func newMockHttpServer() *httptest.Server {
 	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
+		if r.Method != "GET" && r.Method != "POST" {
 			fmt.Printf("Expected 'GET' request, got '%s'", r.Method)
 		}
+		if r.URL.EscapedPath() == "/api/v1/auth" {
+			tokenBytes, _ := json.Marshal(map[string]interface{}{"token": r.Header.Get("Authorization")})
+
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(tokenBytes)
+			return
+		}
+
 		if r.URL.EscapedPath() != "/api/v1/token" {
 			fmt.Printf("Expected request to '/api/v1/token', got '%s'", r.URL.EscapedPath())
 		}
 		_ = r.ParseForm()
 		token := r.Form.Get("val")
+		if token == "" && r.Header.Get("Authorization") != "" {
+			token = r.Header.Get("Authorization")
+		}
 		tokenBytes, _ := json.Marshal(map[string]interface{}{"token": token})
 
 		w.WriteHeader(http.StatusOK)

@@ -1,0 +1,971 @@
+{{ define "BaseTemplate" }}
+{{- /*gotype:github.com/k-cloud-labs/pkg/utils/interrupter/model.MutatingRenderData*/ -}}
+import (
+	"strings"
+	"strconv"
+	"math"
+	"list"
+)
+data: _ @tag(data)
+object: data.object
+kind : object.kind
+oldObject: data.oldObject
+{{if .ValueRef}}
+	{{if or (eq .ValueRef.From "k8s") (eq .ValueRef.From "http") (eq .ValueRef.From "owner")}}
+		{{.ValueRef.CueObjectKey}} : data.extraParams."{{.ValueRef.CueObjectKey}}"
+	{{end}}
+{{end}}
+{{if and (eq .Type "resourcesOversell") (.ResourcesOversell) }}
+//  then put pre-handle code here
+	{{- /* 提前遍历 Rules,并把所有 resources 相关规则提取出来，这里需要预处理 */ -}}
+	{{- template "PreResourcesOversellTemplate" .ResourcesOversell}}
+{{end}}
+
+
+unFlattenPatches: [
+	{{if eq .Type "annotations"}}
+	if object.metadata.annotations == _|_ {
+		{
+			op: "replace"
+			path: "/metadata/annotations"
+			value: {}
+		},
+	},
+	{{end}}
+	{{if eq .Type "labels"}}
+	if object.metadata.labels == _|_ {
+		{
+			op: "replace"
+			path: "/metadata/labels"
+			value: {}
+		},
+	},
+	{{end}}
+	{{if or (eq .Type "resources") (eq .Type "resourcesOversell")}}
+		if kind == "Pod" {
+			[
+			if object.spec.containers[0].resources == _|_ {
+				[{
+					op: "replace"
+					path: "/spec/containers/0/resources"
+					value: {}
+				}],
+			}
+			if object.spec.containers[0].resources.requests == _|_ {
+				[{
+					op: "replace"
+					path: "/spec/containers/0/resources/requests"
+					value: {}
+				}],
+			}
+			if object.spec.containers[0].resources.limits == _|_ {
+				[{
+					op: "replace"
+					path: "/spec/containers/0/resources/limits"
+					value: {}
+				}],
+			}
+			]
+		}
+
+		if kind != "Pod" {
+			[
+			if object.spec.template.spec.containers[0].resources == _|_ {
+				[{
+					op: "replace"
+					path: "/spec/template/spec/containers/0/resources"
+					value: {}
+				}],
+			}
+			if object.spec.template.spec.containers[0].resources.requests == _|_ {
+				[{
+					op: "replace"
+					path: "/spec/template/spec/containers/0/resources/requests"
+					value: {}
+				}],
+			}
+			if object.spec.template.spec.containers[0].resources.limits == _|_ {
+				[{
+					op: "replace"
+					path: "/spec/template/spec/containers/0/resources/limits"
+					value: {}
+				}],
+			}
+			]
+		}
+	{{end}}
+	{{if eq .Type "tolerations"}}
+	{{/*do nothing for now*/}}
+	{{end}}
+
+	{{if eq .Type "affinity"}}
+	{{/*do nothing for now*/}}
+	{{end}}
+
+	{{- if not (isValidOp .)}}
+	// rule is invalid, skip.
+	{{else}}
+	{{- if eq .Type "annotations"}}
+	// annotations
+		{{- template "AnnotationsTemplate" .}}
+	{{- end}}
+	{{- if eq .Type "labels"}}
+	// labels
+		{{- template "LabelsTemplate" .}}
+	{{- end}}
+	{{- if eq .Type "resourcesOversell"}}
+		// resources oversell
+		{{if .ResourcesOversell}}
+			{{- template "ResourcesOversellTemplate" .}}
+		{{end}}
+	{{- end}}
+	{{- if eq .Type "resources"}}
+		// resources
+		{{if .Resources}}
+			{{- template "ResourcesTemplate" .}}
+		{{end}}
+	{{- end}}
+	{{- if eq .Type "tolerations"}}
+		// toleration
+		{{if .Tolerations}}
+			{{- template "TolerationTemplate" .}}
+		{{end}}
+	{{- end}}
+	{{- if eq .Type "affinity"}}
+		// affinity
+		{{- if .Affinity}}
+			{{- template "AffinityTemplate" .}}
+		{{- end}}
+	{{- end}}
+	{{- end}}
+]
+
+patches: list.FlattenN(unFlattenPatches, -1)
+{{- end -}}
+
+{{/*annotations*/}}
+{{ define "AnnotationsTemplate"}}
+    {{- /*gotype:github.com/k-cloud-labs/pkg/utils/interrupter/model.MutatingRenderData*/ -}}
+	{{if eq .Op "remove"}}
+		if object.metadata.annotations."{{.Path}}" != _|_ {
+			{
+				op: "{{ .Op }}"
+				path: "/metadata/annotations/{{ .Path }}"
+			},
+		}
+	{{else}}
+		{{if eq .ValueType "const"}}
+			{{if isMap .Value}}
+				{{$tempMap := convertToMap .Value}}
+				{{$rule := .}}
+				{{range $k, $v := $tempMap}}
+					{
+						op: "{{ $rule.Op }}"
+						path: "/metadata/annotations/{{ $k }}"
+						value: "{{$v}}"
+					},
+				{{end}}
+			{{else}}
+			{
+				op: "{{ .Op }}"
+				path: "/metadata/annotations/{{ .Path }}"
+				value: "{{.Value}}"
+			},
+		{{end}}
+		{{end}}
+		{{if and (eq .ValueType "ref") (.ValueRef)}}
+			if {{.ValueRef.CueObjectKey}}.{{ .ValueRef.Path}} != _|_ {
+				{
+					op: "{{ .Op }}"
+					path: "/metadata/annotations/{{ .Path }}"
+					value: {{.ValueRef.CueObjectKey}}.{{ .ValueRef.Path}}
+				}
+			},
+		{{end}}
+	{{end}}
+{{end}}
+
+{{/*labels*/}}
+{{ define "LabelsTemplate"}}
+    {{- /*gotype:github.com/k-cloud-labs/pkg/utils/interrupter/model.MutatingRenderData*/ -}}
+	{{if eq .Op "remove"}}
+		if object.metadata.labels."{{.Path}}" != _|_ {
+			{
+				op: "{{ .Op }}"
+				path: "/metadata/labels/{{ .Path }}"
+			},
+		}
+	{{else}}
+		{{if eq .ValueType "const"}}
+			{{if isMap .Value}}
+				{{$tempMap := convertToMap .Value}}
+				{{$rule := .}}
+				{{range $k, $v := $tempMap}}
+					{
+						op: "{{ $rule.Op }}"
+						path: "/metadata/labels/{{ $k }}"
+						value: "{{$v}}"
+					},
+				{{end}}
+			{{else}}
+			{
+				op: "{{ .Op }}"
+				path: "/metadata/labels/{{ .Path }}"
+				value: "{{.Value}}"
+			},
+			{{end}}
+		{{end}}
+		{{if and (eq .ValueType "ref") (.ValueRef)}}
+			if {{.ValueRef.CueObjectKey}}.{{ .ValueRef.Path}} != _|_ {
+				{
+					op: "{{ .Op }}"
+					path: "/metadata/labels/{{ .Path }}"
+					value: {{.ValueRef.CueObjectKey}}.{{ .ValueRef.Path}}
+				}
+			},
+		{{end}}
+	{{end}}
+{{end}}
+
+{{/*resources*/}}
+{{define "ResourcesTemplate"}}
+    {{- /*gotype:github.com/k-cloud-labs/pkg/utils/interrupter/model.MutatingRenderData*/ -}}
+	{{if eq .Op "remove"}}
+		{{range $key, $v := .Resources.Requests}}
+			if kind == "Pod" {
+				[
+				if object.spec.containers[0].resources.requests."{{$key}}" != _|_ {
+					[{
+						op: "remove"
+						path: "/spec/containers/0/resources/requests/{{$key}}"
+					}],
+				}
+				]
+			}
+			if kind != "Pod" {
+				[
+				if object.spec.template.spec.containers[0].resources.requests."{{$key}}" != _|_ {
+					[{
+						op: "remove"
+						path: "/spec/template/spec/containers/0/resources/requests/{{$key}}"
+					}],
+				}
+				]
+			}
+		{{end}}
+		{{range $key,$v := .Resources.Limits}}
+			if kind == "Pod" {
+				[
+				if object.spec.containers[0].resources.limits."{{$key}}" != _|_ {
+					[{
+						op: "remove"
+						path: "/spec/containers/0/resources/limits/{{$key}}"
+					}],
+				}
+				]
+			}
+
+			if kind != "Pod" {
+				[
+				if object.spec.template.spec.containers[0].resources.limits."{{$key}}" != _|_ {
+					[{
+						op: "remove"
+						path: "/spec/template/spec/containers/0/resources/limits/{{$key}}"
+					}],
+				}
+				]
+			}
+		{{end}}
+	{{else}}
+		{{range $key, $val := .Resources.Requests}}
+		if kind == "Pod" {
+			[{
+				op: "replace"
+				path: "/spec/containers/0/resources/requests/{{$key}}"
+				value: "{{convertQuantity $val}}"
+			}],
+		}
+		if kind != "Pod" {
+			[{
+				op: "replace"
+				path: "/spec/template/spec/containers/0/resources/requests/{{$key}}"
+				value: "{{convertQuantity $val}}"
+			}],
+		}
+		{{end}}
+		{{range $key, $val := .Resources.Limits}}
+		if kind == "Pod" {
+			[{
+				op: "replace"
+				path: "/spec/containers/0/resources/limits/{{$key}}"
+				value: "{{convertQuantity $val}}"
+			}],
+		}
+		if kind != "Pod" {
+			[{
+				op: "replace"
+				path: "/spec/template/spec/containers/0/resources/limits/{{$key}}"
+				value: "{{convertQuantity $val}}"
+			}],
+		}
+		{{end}}
+	{{end}}
+{{end}}
+
+{{/*oversell*/}}
+{{define "PreResourcesOversellTemplate"}}
+	{{- /*gotype:github.com/k-cloud-labs/pkg/apis/policy/v1alpha1.ResourcesOversellRule*/}}
+	resources: {}
+	limits: {}
+	requests: {}
+	if kind == "Pod" {
+		resources: object.spec.containers[0].resources
+	}
+	if kind != "Pod" {
+		resources: object.spec.template.spec.containers[0].resources
+	}
+
+	if resources.limits != _|_ {
+		limits: resources.limits
+	}
+
+	if resources.requests != _|_ {
+		requests: resources.requests
+	}
+
+	{{ if .CpuFactor }}
+		cpuFactor: {{ .CpuFactor }}
+		isZeroCpuRequest: *false | bool
+		if requests.cpu != _|_ {
+			if requests.cpu == "0"{
+				isZeroCpuRequest: true
+			}
+		}
+		cpu: *0|number
+		isMicroCpu: *false | bool
+		if limits.cpu != _|_ {
+			isMicroCpu: strings.HasSuffix(limits.cpu, "m")
+			if !isZeroCpuRequest {
+				if isMicroCpu {
+					cpu: strconv.Atoi(strings.TrimSuffix(limits.cpu, "m")) * 0.001 * cpuFactor
+				}
+				if !isMicroCpu {
+					cpu: strconv.Atoi(limits.cpu) * cpuFactor
+				}
+			}
+			if isZeroCpuRequest {
+				cpu: 0.0
+			}
+		}
+	{{end}}
+	{{ if .MemoryFactor }}
+		memoryFactor: {{ .MemoryFactor }}
+		isMemoryWithUnit: *false | bool
+		if limits.memory != _|_ {
+			isMemoryWithUnit: limits.memory !~ "^[0-9]*$"
+		}
+		memory: *0|number
+		if isMemoryWithUnit{
+			if strings.HasSuffix(limits.memory, "Gi"){
+				memory: strconv.Atoi(strings.TrimSuffix(limits.memory, "Gi")) * 1024 * 1024 * 1024 * memoryFactor
+			}
+			if strings.HasSuffix(limits.memory, "G"){
+				memory: strconv.Atoi(strings.TrimSuffix(limits.memory, "G")) * 1000 * 1000 * 1000 * memoryFactor
+			}
+			if strings.HasSuffix(limits.memory, "Mi"){
+				memory: strconv.Atoi(strings.TrimSuffix(limits.memory, "Mi")) * 1024 * 1024 * memoryFactor
+			}
+			if strings.HasSuffix(limits.memory, "M"){
+				memory: strconv.Atoi(strings.TrimSuffix(limits.memory, "M")) * 1000 * 1000 * memoryFactor
+			}
+			if strings.HasSuffix(limits.memory, "Ki"){
+				memory: strconv.Atoi(strings.TrimSuffix(limits.memory, "Ki")) * 1024 * memoryFactor
+			}
+			if strings.HasSuffix(limits.memory, "K"){
+				memory: strconv.Atoi(strings.TrimSuffix(limits.memory, "K")) * 1000 * memoryFactor
+			}
+			if strings.HasSuffix(limits.memory, "Ti"){
+				memory: strconv.Atoi(strings.TrimSuffix(limits.memory, "Ti")) * 1024 * 1024 * 1024 * 1024 * memoryFactor
+			}
+			if strings.HasSuffix(limits.memory, "T"){
+				memory: strconv.Atoi(strings.TrimSuffix(limits.memory, "T")) * 1000 * 1000 * 1000 * 1000 * memoryFactor
+			}
+		}
+		if !isMemoryWithUnit {
+			memory: strconv.Atoi(limits.memory) * memoryFactor
+		}
+	{{end}}
+	{{ if .DiskFactor }}
+		diskFactor: {{ .DiskFactor }}
+		isZeroDiskLimit: bool
+		isDiskWithUnit: *false | bool
+		if limits."ephemeral-storage" == _|_ {
+			isZeroDiskLimit: true
+		}
+		if limits."ephemeral-storage" != _|_ {
+			isDiskWithUnit: limits."ephemeral-storage" !~ "^[0-9]*$"
+			if limits."ephemeral-storage" != "0" && limits."ephemeral-storage"!= ""{
+				isZeroDiskLimit: false
+			}
+		}
+		disk: *0|number
+		if !isZeroDiskLimit {
+			if isDiskWithUnit{
+				if strings.HasSuffix(limits."ephemeral-storage", "Gi"){
+					disk: strconv.Atoi(strings.TrimSuffix(limits."ephemeral-storage", "Gi")) * 1024 * 1024 * 1024 * diskFactor
+				}
+				if strings.HasSuffix(limits."ephemeral-storage", "G"){
+					disk: strconv.Atoi(strings.TrimSuffix(limits."ephemeral-storage", "G")) * 1000 * 1000 * 1000 * diskFactor
+				}
+				if strings.HasSuffix(limits."ephemeral-storage", "Mi"){
+					disk: strconv.Atoi(strings.TrimSuffix(limits."ephemeral-storage", "Mi")) * 1024 * 1024 * diskFactor
+				}
+				if strings.HasSuffix(limits."ephemeral-storage", "M"){
+					disk: strconv.Atoi(strings.TrimSuffix(limits."ephemeral-storage", "M")) * 1000 * 1000 * diskFactor
+				}
+				if strings.HasSuffix(limits."ephemeral-storage", "Ki"){
+					disk: strconv.Atoi(strings.TrimSuffix(limits."ephemeral-storage", "Ki")) * 1024 * diskFactor
+				}
+				if strings.HasSuffix(limits."ephemeral-storage", "K"){
+					disk: strconv.Atoi(strings.TrimSuffix(limits."ephemeral-storage", "K")) * 1000 * diskFactor
+				}
+				if strings.HasSuffix(limits."ephemeral-storage", "Ti"){
+					disk: strconv.Atoi(strings.TrimSuffix(limits."ephemeral-storage", "Ti")) * 1024 * 1024 * 1024 * 1024 * diskFactor
+				}
+				if strings.HasSuffix(limits."ephemeral-storage", "T"){
+					disk: strconv.Atoi(strings.TrimSuffix(limits."ephemeral-storage", "T")) * 1000 * 1000 * 1000 * 1000 * diskFactor
+				}
+			}
+			if !isDiskWithUnit{
+				disk: strconv.Atoi(limits."ephemeral-storage") * diskFactor
+			}
+		}
+	{{end}}
+{{end}}
+
+{{define "ResourcesOversellTemplate"}}
+    {{- /*gotype:github.com/k-cloud-labs/pkg/utils/interrupter/model.MutatingRenderData*/ -}}
+	{{ if .ResourcesOversell.CpuFactor }}
+		{{ if eq .Op "remove"}}
+			if kind == "Pod" {
+				[
+				if object.spec.containers[0].resources.requests.cpu != _|_ {
+					{
+						op: "remove"
+						path: "/spec/containers/0/resources/requests/cpu"
+					},
+				}
+				]
+			}
+			if kind != "Pod" {
+				[
+				if object.spec.template.spec.containers[0].resources.requests.cpu != _|_ {
+					{
+						op: "remove"
+						path: "/spec/template/spec/containers/0/resources/requests/cpu"
+					},
+				}
+				]
+			}
+		{{else}}
+			if kind == "Pod" {
+				[{
+					op: "replace"
+					path: "/spec/containers/0/resources/requests/cpu"
+					value: strconv.FormatInt(math.Round(cpu * 1000),10)+"m"
+				}],
+			}
+			if kind != "Pod" {
+				[{
+					op: "replace"
+					path: "/spec/template/spec/containers/0/resources/requests/cpu"
+					value: strconv.FormatInt(math.Round(cpu * 1000),10)+"m"
+				}],
+			}
+		{{end}}
+	{{end}}
+	{{ if .ResourcesOversell.MemoryFactor }}
+		{{ if eq .Op "remove"}}
+			if kind == "Pod" {
+				[
+				if object.spec.containers[0].resources.requests.memory != _|_ {
+					{
+						op: "remove"
+						path: "/spec/containers/0/resources/requests/memory"
+					},
+				}
+				]
+			}
+			if kind != "Pod" {
+				[
+				if object.spec.template.spec.containers[0].resources.requests.memory != _|_ {
+					{
+						op: "remove"
+						path: "/spec/template/spec/containers/0/resources/requests/memory"
+					},
+				}
+				]
+			}
+		{{else}}
+			if kind == "Pod" {
+				[{
+					op: "replace"
+					path: "/spec/containers/0/resources/requests/memory"
+					value: math.Round(memory)
+				}],
+			}
+			if kind != "Pod" {
+				[{
+					op: "replace"
+					path: "/spec/template/spec/containers/0/resources/requests/memory"
+					value: math.Round(memory)
+				}],
+			}
+		{{end}}
+	{{end}}
+	{{ if .ResourcesOversell.DiskFactor }}
+		{{ if eq .Op "remove"}}
+			if kind == "Pod" {
+				[
+				if !isZeroDiskLimit {
+					[
+					if object.spec.containers[0].resources.requests."ephemeral-storage" != _|_ {
+						[{
+							op: "remove"
+							path: "/spec/containers/0/resources/requests/ephemeral-storage"
+						}],
+					}]
+				}]
+			}
+			if kind != "Pod" {
+				[
+				if !isZeroDiskLimit {
+					[
+					if object.spec.template.spec.containers[0].resources.requests."ephemeral-storage" != _|_ {
+						[{
+							op: "remove"
+							path: "/spec/template/spec/containers/0/resources/requests/ephemeral-storage"
+						}],
+					}]
+				}]
+			}
+		{{else}}
+			if kind == "Pod" {
+				[
+				if !isZeroDiskLimit {
+					[{
+						op: "replace"
+						path: "/spec/containers/0/resources/requests/ephemeral-storage"
+						value: math.Round(disk)
+					}],
+				}],
+			}
+			if kind != "Pod" {
+				[
+				if !isZeroDiskLimit {
+					[{
+						op: "replace"
+						path: "/spec/template/spec/containers/0/resources/requests/ephemeral-storage"
+						value: math.Round(disk)
+					}],
+				}],
+			}
+		{{end}}
+	{{end}}
+{{end}}
+
+{{/*affinity*/}}
+{{define "AffinityTemplate"}}
+    {{- /*gotype:github.com/k-cloud-labs/pkg/utils/interrupter/model.MutatingRenderData*/ -}}
+	{{ $rule := .}}
+	{{if ne $rule.Op "remove"}}
+		if object.spec.affinity == _|_ {
+			[{
+				op: "replace"
+				path: "/spec/affinity"
+				value: {{marshal .Affinity}}
+			}],
+		}
+	{{end}}
+	{{/*if op is delete and affinity is nil, then no need to do anything*/}}
+	if object.spec.affinity != _|_ {
+		[
+	{{if .Affinity.NodeAffinity}}
+		{{if ne $rule.Op "remove"}}
+			if object.spec.affinity.nodeAffinity == _|_ {
+				[{
+					op: "replace"
+					path: "/spec/affinity/nodeAffinity"
+					value: {{marshal .Affinity.NodeAffinity}}
+				}]
+			},
+		{{end}}
+		{{if or (.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution) (.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution)}}
+			if object.spec.affinity.nodeAffinity != _|_ {
+				[
+			{{if .Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution}}
+				{{ $nodeReq := .Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution}}
+				{{if or (eq $rule.Op "replace") (eq $rule.Op "remove")}}
+					[{
+						op: "{{$rule.Op}}"
+						path: "/spec/affinity/nodeAffinity/requiredDuringSchedulingIgnoredDuringExecution"
+						{{if eq $rule.Op "replace"}}
+							value: {{marshal $nodeReq}}
+						{{end}}
+					}]
+				{{else}}
+					{{/*only add op now*/}}
+					if object.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution == _|_ {
+						[{
+							op: "replace"
+							path: "/spec/affinity/nodeAffinity/requiredDuringSchedulingIgnoredDuringExecution"
+							value: {{marshal $nodeReq}}
+						}],
+					}
+					{{if $nodeReq.NodeSelectorTerms}}
+						if object.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution != _|_ {
+							[
+							if len(object.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms) == 0 {
+								[{
+									op: "replace"
+									path: "/spec/affinity/nodeAffinity/requiredDuringSchedulingIgnoredDuringExecution/nodeSelectorTerms"
+									value: {{marshal $nodeReq.NodeSelectorTerms}}
+								}]
+							},
+							if len(object.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms) > 0 {
+								[
+							{{range $nodeReq.NodeSelectorTerms}}
+								{
+									op: "add"
+									path: "/spec/affinity/nodeAffinity/requiredDuringSchedulingIgnoredDuringExecution/nodeSelectorTerms/0"
+									value: {{marshal .}}
+								}
+							{{end}}
+								]
+							},
+						]}
+					{{end}}
+				{{end}}
+			{{end}}
+			{{if .Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution}}
+				{{ $nodePre := .Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution}}
+				{{if or (eq $rule.Op "replace") (eq $rule.Op "remove")}}
+					{{/*replace or delete only support PreferredDuringSchedulingIgnoredDuringExecution level*/}}
+					[{
+						op: "{{$rule.Op}}"
+						path: "/spec/affinity/nodeAffinity/preferredDuringSchedulingIgnoredDuringExecution"
+						{{if eq $rule.Op "replace"}}
+							value: {{marshal $nodePre}}
+						{{end}}
+					}]
+				{{else}}
+					{{/*only add op here now*/}}
+					if object.spec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution == _|_ {
+						[{
+							op: "replace"
+							path: "/spec/affinity/nodeAffinity/preferredDuringSchedulingIgnoredDuringExecution"
+							value: {{marshal $nodePre}}
+						}]
+					}
+					if object.spec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution != _|_ {
+						[
+						if len(object.spec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution) == 0 {
+							[{
+								op: "replace"
+								path: "/spec/affinity/nodeAffinity/preferredDuringSchedulingIgnoredDuringExecution"
+								value: {{marshal $nodePre}}
+							}]
+						}
+						if len(object.spec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution) > 0 {
+							[
+						{{range $nodePre}}
+							{
+								op: "add"
+								path: "/spec/affinity/nodeAffinity/preferredDuringSchedulingIgnoredDuringExecution/0"
+								value: {{marshal .}}
+							}
+						{{end}}
+							]
+						},
+						]
+					}
+				{{end}}
+			{{end}}
+			]}
+		{{end}}
+	{{end}}
+	{{if .Affinity.PodAffinity}}
+		{{if ne $rule.Op "remove"}}
+			if object.spec.affinity.podAffinity == _|_ {
+				[{
+					op: "replace"
+					path: "/spec/affinity/podAffinity"
+					value: {{marshal .Affinity.PodAffinity}}
+				}],
+			}
+		{{end}}
+		{{if or (.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution) (.Affinity.PodAffinity.PreferredDuringSchedulingIgnoredDuringExecution)}}
+			if object.spec.affinity.podAffinity != _|_ {
+			[
+			{{if .Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution}}
+				{{ $podReq := .Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution}}
+				{{if or (eq $rule.Op "replace") (eq $rule.Op "remove")}}
+					[{
+						op: "{{$rule.Op}}"
+						path: "/spec/affinity/podAffinity/requiredDuringSchedulingIgnoredDuringExecution"
+						{{if eq $rule.Op "replace"}}
+							value: {{marshal $podReq}}
+						{{end}}
+					}]
+				{{else}}
+					{{/*only add op now*/}}
+					if object.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution == _|_ {
+						[{
+							op: "replace"
+							path: "/spec/affinity/podAffinity/requiredDuringSchedulingIgnoredDuringExecution"
+							value: {{marshal $podReq}}
+						}],
+					}
+					if object.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution != _|_ {
+						[
+						if len(object.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution) == 0 {
+							[{
+								op: "replace"
+								path: "/spec/affinity/podAffinity/requiredDuringSchedulingIgnoredDuringExecution"
+								value: {{marshal $podReq}}
+							}],
+						}
+						if len(object.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution) > 0 {
+							[
+						{{range $podReq}}
+							{
+								op: "add"
+								path: "/spec/affinity/podAffinity/requiredDuringSchedulingIgnoredDuringExecution/0"
+								value: {{marshal .}}
+							},
+						{{end}}
+							]
+						}
+						]
+					}
+				{{end}}
+			{{end}}
+			{{if .Affinity.PodAffinity.PreferredDuringSchedulingIgnoredDuringExecution}}
+				{{ $podPre := .Affinity.PodAffinity.PreferredDuringSchedulingIgnoredDuringExecution}}
+				{{if or (eq $rule.Op "replace") (eq $rule.Op "remove")}}
+					[{
+						op: "{{$rule.Op}}"
+						path: "/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution"
+						{{if eq $rule.Op "replace"}}
+							value: {{marshal $podPre}}
+						{{end}}
+					}],
+				{{else}}
+					{{/*only add op now*/}}
+					if object.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution == _|_ {
+						[{
+							op: "replace"
+							path: "/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution"
+							value: {{marshal $podPre}}
+						}],
+					}
+					if object.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution != _|_ {
+						[
+						if len(object.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution) == 0 {
+							[{
+								op: "replace"
+								path: "/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution"
+								value: {{marshal $podPre}}
+							}],
+						}
+						if len(object.spec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution) > 0 {
+							[
+						{{range $podPre}}
+							{
+								op: "add"
+								path: "/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution/0"
+								value: {{marshal .}}
+							},
+						{{end}}
+							]
+						}]
+					}
+				{{end}}
+			{{end}}
+			]}
+		{{end}}
+	{{end}}
+	{{if .Affinity.PodAntiAffinity}}
+		{{if ne $rule.Op "remove"}}
+			if object.spec.affinity.podAntiAffinity == _|_ {
+				[{
+					op: "replace"
+					path: "/spec/affinity/podAntiAffinity"
+					value: {{marshal .Affinity.PodAntiAffinity}}
+				}],
+			}
+		{{end}}
+		{{if or (.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution) (.Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution)}}
+			if object.spec.affinity.podAntiAffinity != _|_ {
+			[
+			{{if .Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution}}
+				{{ $podReq := .Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution}}
+				{{if or (eq $rule.Op "replace") (eq $rule.Op "remove")}}
+					[{
+						op: "{{$rule.Op}}"
+						path: "/spec/affinity/podAntiAffinity/requiredDuringSchedulingIgnoredDuringExecution"
+						{{if eq $rule.Op "replace"}}
+							value: {{marshal $podReq}}
+						{{end}}
+					}]
+				{{else}}
+					{{/*only add op now*/}}
+					if object.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution == _|_ {
+						[{
+							op: "replace"
+							path: "/spec/affinity/podAntiAffinity/requiredDuringSchedulingIgnoredDuringExecution"
+							value: {{marshal $podReq}}
+						}],
+					}
+					if object.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution != _|_ {
+					[
+						if len(object.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution) == 0 {
+							[{
+								op: "replace"
+								path: "/spec/affinity/podAntiAffinity/requiredDuringSchedulingIgnoredDuringExecution"
+								value: {{marshal $podReq}}
+							}],
+						}
+						if len(object.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution) > 0 {
+						{{range $podReq}}
+							[{
+								op: "add"
+								path: "/spec/affinity/podAntiAffinity/requiredDuringSchedulingIgnoredDuringExecution/0"
+								value: {{marshal .}}
+							}]
+						{{end}}
+						}
+					]}
+				{{end}}
+			{{end}}
+			{{if .Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution}}
+				{{ $podPre := .Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution}}
+				{{if or (eq $rule.Op "replace") (eq $rule.Op "remove")}}
+					[{
+						op: "{{$rule.Op}}"
+						path: "/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution"
+						{{if eq $rule.Op "replace"}}
+							value: {{marshal $podPre}}
+						{{end}}
+					}],
+				{{else}}
+					{{/*only add op now*/}}
+					if object.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution == _|_ {
+						[{
+							op: "replace"
+							path: "/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution"
+							value: {{marshal $podPre}}
+						}],
+					}
+					if object.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution != _|_ {
+					[
+						if len(object.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution) == 0 {
+							[{
+								op: "replace"
+								path: "/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution"
+								value: {{marshal $podPre}}
+							}],
+						}
+						if len(object.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution) > 0 {
+						{{range $podPre}}
+							[{
+								op: "add"
+								path: "/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution/0"
+								value: {{marshal .}}
+							}]
+						{{end}}
+						}
+					]}
+				{{end}}
+			{{end}}
+			]}
+		{{end}}
+	{{end}}
+	]}
+{{end}}
+
+{{/*tolerations*/}}
+{{define "TolerationTemplate"}}
+{{- /*gotype:github.com/k-cloud-labs/pkg/utils/interrupter/model.MutatingRenderData*/ -}}
+if object.spec.tolerations == _|_ {
+	{{if eq .Op "remove"}}
+		{{/*do nothing since toleration is empty*/}}
+	{{else}}
+		{{/*add or replace*/}}
+		{{/*add directly since slice is empty*/}}
+		[{
+			op: "replace"
+			path: "/spec/tolerations"
+			value: {{marshal .Tolerations}}
+		}],
+	{{end}}
+}
+if object.spec.tolerations != _|_ {
+	[
+	if len(object.spec.tolerations) == 0 {
+		{{if eq .Op "remove"}}
+			{{/*do nothing since toleration is empty*/}}
+		{{else}}
+			{{/*add or replace*/}}
+			{{/*add directly since slice is empty*/}}
+			[{
+				op: "replace"
+				path: "/spec/tolerations"
+				value: {{marshal .Tolerations}}
+			}],
+		{{end}}
+	},
+	if len(object.spec.tolerations) > 0 {
+		[
+		{{$r := .}}
+		{{range $idx, $toleration := .Tolerations}}
+			{{if eq $r.Op "add"}}
+				{
+					op: "add"
+					path: "/spec/tolerations/0"
+					value: {{marshal $toleration }}
+				}
+			{{else}}
+				for i, t in object.spec.tolerations {
+					{{if eq $toleration.Operator "Exists"}}
+						[
+						if t.key == "{{ $toleration.Key }}" {
+							[{
+								op: "{{$r.Op}}"
+								path: "/spec/tolerations/\(i)"
+								{{if eq $r.Op "replace"}}
+									value: {{marshal $toleration }}
+								{{end}}
+							}],
+						}]
+					{{else if eq $toleration.Operator "Equal"}}
+						[
+						if t.key == "{{ $toleration.Key }}" {
+							[
+							if t.value == "{{$toleration.Value}}" {
+								[{
+									op: "{{$r.Op}}"
+									path: "/spec/tolerations/\(i)"
+									{{if eq $r.Op "replace"}}
+										value: {{marshal $toleration }}
+									{{end}}
+								}],
+							}]
+						}]
+					{{end}}
+				}
+			{{end}}
+		{{end}}
+	]}]
+}
+{{end}}

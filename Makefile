@@ -102,6 +102,14 @@ fmt-check: ## Check project files format info
 vet: ## Vet project files
 	@$(GO) vet $(VETPACKAGES)
 
+.PHONY: docs
+docs-generate: gen-crd-api-reference-docs ## generate crd api docs
+	$(GEN_CRD_API_REFERENCE_DOCS) -config \
+		./docs/apidoc.config.json \
+		-api-dir "./apis/policy/v1alpha1" \
+		-out-file ./docs/crd-apidoc.md \
+		-template-dir ./docs/template
+
 ###@ Deployment
 #
 #ifndef ignore-not-found
@@ -128,7 +136,12 @@ vet: ## Vet project files
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 .PHONY: controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.8.0)
+	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.9.2)
+
+GEN_CRD_API_REFERENCE_DOCS = $(shell pwd)/bin/gen-crd-api-reference-docs
+.PHONY: gen-crd-api-reference-docs
+gen-crd-api-reference-docs: ## Download gen-crd-api-reference-docs locally if necessary.
+	$(call go-get-tool,$(GEN_CRD_API_REFERENCE_DOCS),github.com/ahmetb/gen-crd-api-reference-docs@0.1.5)
 
 KUSTOMIZE = $(shell pwd)/bin/kustomize
 .PHONY: kustomize
@@ -149,7 +162,7 @@ TMP_DIR=$$(mktemp -d) ;\
 cd $$TMP_DIR ;\
 go mod init tmp ;\
 echo "Downloading $(2)" ;\
-GOBIN=$(PROJECT_DIR)/bin go get $(2) ;\
+GOBIN=$(PROJECT_DIR)/bin go install $(2) ;\
 rm -rf $$TMP_DIR ;\
 }
 endef

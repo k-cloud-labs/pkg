@@ -32,7 +32,7 @@ type PolicyV1alpha1Interface interface {
 	OverridePoliciesGetter
 }
 
-// PolicyV1alpha1Client is used to interact with features provided by the policy group.
+// PolicyV1alpha1Client is used to interact with features provided by the policy.kcloudlabs.io group.
 type PolicyV1alpha1Client struct {
 	restClient rest.Interface
 }
