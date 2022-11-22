@@ -216,7 +216,7 @@ func Test_policyInterrupterImpl_OnValidating(t *testing.T) {
 		return
 	}
 
-	policyInterrupter := NewPolicyInterrupter(mtm, vtm, templatemanager.NewCueManager(), tokenmanager.NewTokenManager())
+	policyInterrupter := NewPolicyInterrupterManager(mtm, vtm, templatemanager.NewCueManager(), tokenmanager.NewTokenManager())
 
 	type args struct {
 		obj    *unstructured.Unstructured
@@ -341,7 +341,7 @@ func Test_policyInterrupterImpl_OnMutating(t *testing.T) {
 		return
 	}
 
-	policyInterrupter := NewPolicyInterrupter(mtm, vtm, templatemanager.NewCueManager(), tokenmanager.NewTokenManager())
+	policyInterrupter := NewPolicyInterrupterManager(mtm, vtm, templatemanager.NewCueManager(), tokenmanager.NewTokenManager())
 
 	type args struct {
 		obj    *unstructured.Unstructured

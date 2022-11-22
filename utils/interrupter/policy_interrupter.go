@@ -2,12 +2,22 @@ package interrupter
 
 import (
 	"strings"
+	"sync"
 
 	jsonpatchv2 "gomodules.xyz/jsonpatch/v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 )
+
+// PolicyInterrupterManager manage multi PolicyInterrupter and decide which one to use by gvk.
+type PolicyInterrupterManager interface {
+	PolicyInterrupter
+	// AddInterrupter add a PolicyInterrupter to manager,
+	//  it will replace interrupter if already add with same gvk.s
+	AddInterrupter(gvk schema.GroupVersionKind, pi PolicyInterrupter)
+}
 
 // PolicyInterrupter defines interrupt process for policy change
 // It validate and mutate policy.
@@ -21,9 +31,7 @@ type PolicyInterrupter interface {
 }
 
 type policyInterrupterImpl struct {
-	overridePolicyInterrupter        PolicyInterrupter
-	clusterOverridePolicyInterrupter PolicyInterrupter
-	clusterValidatePolicyInterrupter PolicyInterrupter
+	interrupters sync.Map
 }
 
 func (p *policyInterrupterImpl) OnMutating(obj, oldObj *unstructured.Unstructured) ([]jsonpatchv2.JsonPatchOperation, error) {
@@ -52,23 +60,20 @@ func (p *policyInterrupterImpl) getInterrupter(obj *unstructured.Unstructured) P
 		return nil
 	}
 
-	// check crd type before call this func
-	switch obj.GetKind() {
-	case "ClusterValidatePolicy":
-		return p.clusterValidatePolicyInterrupter
-	case "ClusterOverridePolicy":
-		return p.clusterOverridePolicyInterrupter
-	case "OverridePolicy":
-		return p.overridePolicyInterrupter
+	i, ok := p.interrupters.Load(obj.GroupVersionKind())
+	if ok {
+		return i.(PolicyInterrupter)
 	}
 
 	return nil
 }
 
-func NewPolicyInterrupter(op, cop, cvp PolicyInterrupter) PolicyInterrupter {
+func (p *policyInterrupterImpl) AddInterrupter(gvk schema.GroupVersionKind, pi PolicyInterrupter) {
+	p.interrupters.Store(gvk, pi)
+}
+
+func NewPolicyInterrupterManager() PolicyInterrupterManager {
 	return &policyInterrupterImpl{
-		overridePolicyInterrupter:        op,
-		clusterOverridePolicyInterrupter: cop,
-		clusterValidatePolicyInterrupter: cvp,
+		interrupters: sync.Map{},
 	}
 }
