@@ -224,24 +224,40 @@ type HttpDataRef struct {
 	// Body represents the json body when http method is POST.
 	// +optional
 	Body apiextensionsv1.JSON `json:"body,omitempty"`
-	// TokenAuth defines basic info for get authorization token before do request.
+	// Auth defines basic info for get authorization token before do request.
 	// Note: it will request authURL with post and `Header.Set("Authorization", "Basic "+basicAuth(username, password))`
 	//  and get token from response body. Response Body must be a valid json and contains token like this: `{"token": "xxx"} .
 	//	After get the token, the request will add a new key value to header, key is "Authorization" and value is "Bearer xxx".
-	TokenAuth *HttpRequestAuth `json:"oAuth2,omitempty"`
+	Auth *HttpRequestAuth `json:"auth,omitempty"`
 }
 
 // HttpRequestAuth defines basic info for get auth token from remote api
 type HttpRequestAuth struct {
+	// StaticToken represents for static token for call api instead of get token from remote api.
+	// StaticToken and other fields are mutually exclusive, staticToken is priority to take effect.
+	// +optional
+	StaticToken string `json:"staticToken,omitempty"`
 	// Username represents username for auth.
-	// +required
+	// +optional
 	Username string `json:"username,omitempty"`
 	// Password represents Password for auth.
-	// +required
+	// +optional
 	Password string `json:"password,omitempty"`
 	// AuthURL represents remote url to request and get token.
-	// +required
+	// +optional
 	AuthURL string `json:"authUrl,omitempty"`
+	// ExpireDuration is providing for some auth api won't return exact expire time, so can you this field set
+	//  an expiry duration for token
+	// +optional
+	ExpireDuration metav1.Duration `json:"expireDuration,omitempty"`
+	// Token stores the latest token get from AuthURL, and it'll be updated when token expired.
+	// This filed is not fill by user, so don't edit it.
+	// +optional
+	Token string `json:"token,omitempty"`
+	// ExpireAt sores the token expire time. Same as above field, this field also updated automatically.
+	// This filed is not fill by user, so don't edit it.
+	// +optional
+	ExpireAt metav1.Time `json:"expireAt,omitempty"`
 }
 
 // ResourcesOversellRule defines factor of resource oversell

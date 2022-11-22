@@ -26,8 +26,8 @@ import (
 type DynamicResourceLister interface {
 	// RegisterNewResource add new type of gvr to cache and sync to cache.
 	// If second param waitForSync is true, then it will wait for sync data finish.
-	// It returns true if gvk exist in mem cache or add success, otherwise return false.
-	RegisterNewResource(gvk schema.GroupVersionKind, waitForSync bool) bool
+	// It returns nil if gvk exist in mem cache or add success, otherwise return an error.
+	RegisterNewResource(waitForSync bool, gvkList ...schema.GroupVersionKind) error
 	// GVKToResourceLister try load resource lister from local cache, if not found in local then request
 	// k8s api to get resource.
 	GVKToResourceLister(schema.GroupVersionKind) (cache.GenericLister, error)
@@ -39,11 +39,11 @@ type dynamicResourceListerImpl struct {
 	informer         informermanager.SingleClusterInformerManager
 	listerMap        sync.Map // gvk:lister
 	mapper           *restmapper.DeferredDiscoveryRESTMapper
-	gvkToGVRMap      sync.Map
+	gvkToGvrMap      sync.Map // gvk:gvr
 }
 
 // NewDynamicResourceLister init DynamicResourceLister implemented by dynamicResourceListerImpl.
-func NewDynamicResourceLister(cfg *rest.Config, done <-chan struct{}, gvrList ...schema.GroupVersionResource) (DynamicResourceLister, error) {
+func NewDynamicResourceLister(cfg *rest.Config, done <-chan struct{}) (DynamicResourceLister, error) {
 	d := &dynamicResourceListerImpl{
 		informer:         informermanager.NewSingleClusterInformerManager(dynamic.NewForConfigOrDie(cfg), 0, done),
 		listerMap:        sync.Map{},
@@ -56,38 +56,51 @@ func NewDynamicResourceLister(cfg *rest.Config, done <-chan struct{}, gvrList ..
 	}
 
 	d.mapper = restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(discoveryClient))
-
-	for _, gvr := range gvrList {
-		lister := d.informer.Lister(gvr)
-		d.informer.Start()
-		if m := d.informer.WaitForCacheSync(); !m[gvr] {
-			return nil, fmt.Errorf("sync resource(%v) failed", gvr.String())
-		}
-		d.listerMap.Store(gvr.String(), lister)
-	}
-
+	d.informer.Start()
 	return d, nil
 }
 
-func (d *dynamicResourceListerImpl) RegisterNewResource(gvk schema.GroupVersionKind, waitForSync bool) bool {
-	_, ok := d.listerMap.Load(gvk.String())
-	if ok {
-		return true
+func (d *dynamicResourceListerImpl) RegisterNewResource(waitForSync bool, gvkList ...schema.GroupVersionKind) error {
+	type gvk2Lister struct {
+		gvk    schema.GroupVersionKind
+		lister cache.GenericLister
+	}
+	newResources := make(map[schema.GroupVersionResource]gvk2Lister)
+	for _, gvk := range gvkList {
+		_, ok := d.listerMap.Load(gvk.String())
+		if ok {
+			continue
+		}
+
+		gvr, err := d.gvk2Gvr(gvk)
+		if err != nil {
+			return err
+		}
+
+		newResources[gvr] = gvk2Lister{
+			gvk:    gvk,
+			lister: d.informer.Lister(gvr),
+		}
 	}
 
-	gvr, err := d.gvk2Gvr(gvk)
-	if err != nil {
-		return false
+	if len(newResources) == 0 {
+		return nil // no new resources
 	}
 
-	// not found try to create new lister
-	lister := d.informer.Lister(gvr)
 	d.informer.Start()
-	if waitForSync {
-		d.informer.WaitForCacheSync()
+	if !waitForSync {
+		return nil
 	}
-	d.listerMap.Store(gvk.String(), lister)
-	return true
+
+	cacheMap := d.informer.WaitForCacheSync()
+	for gvr, gl := range newResources {
+		if !cacheMap[gvr] {
+			return fmt.Errorf("sync resource(%v) failed", gvr.String())
+		}
+		d.listerMap.Store(gl.gvk.String(), gl.lister)
+	}
+
+	return nil
 }
 
 func (d *dynamicResourceListerImpl) GVKToResourceLister(gvk schema.GroupVersionKind) (cache.GenericLister, error) {
@@ -102,6 +115,13 @@ func (d *dynamicResourceListerImpl) GVKToResourceLister(gvk schema.GroupVersionK
 		return nil, err
 	}
 
+	// add to cache
+	go func() {
+		if err := d.RegisterNewResource(true, gvk); err != nil {
+			klog.ErrorS(err, "RegisterNewResource got error", "gvk", gvk.String())
+		}
+	}()
+
 	return &simpleLister{
 		gvr: gvr,
 		di:  d.dynamicInterface,
@@ -109,7 +129,7 @@ func (d *dynamicResourceListerImpl) GVKToResourceLister(gvk schema.GroupVersionK
 }
 
 func (d *dynamicResourceListerImpl) gvk2Gvr(gvk schema.GroupVersionKind) (schema.GroupVersionResource, error) {
-	v, ok := d.gvkToGVRMap.Load(gvk.String())
+	v, ok := d.gvkToGvrMap.Load(gvk.String())
 	if ok {
 		return v.(schema.GroupVersionResource), nil
 	}
@@ -119,7 +139,7 @@ func (d *dynamicResourceListerImpl) gvk2Gvr(gvk schema.GroupVersionKind) (schema
 		return schema.GroupVersionResource{}, err
 	}
 
-	d.gvkToGVRMap.Store(gvk.String(), rm.Resource)
+	d.gvkToGvrMap.Store(gvk.String(), rm.Resource)
 	return rm.Resource, nil
 }
 

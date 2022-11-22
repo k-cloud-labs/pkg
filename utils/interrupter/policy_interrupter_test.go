@@ -11,6 +11,7 @@ import (
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/utils/templatemanager"
 	"github.com/k-cloud-labs/pkg/utils/templatemanager/templates"
+	"github.com/k-cloud-labs/pkg/utils/tokenmanager"
 )
 
 func Test_policyInterrupterImpl_renderAndFormat(t *testing.T) {
@@ -215,7 +216,7 @@ func Test_policyInterrupterImpl_OnValidating(t *testing.T) {
 		return
 	}
 
-	policyInterrupter := NewPolicyInterrupter(mtm, vtm, templatemanager.NewCueManager())
+	policyInterrupter := NewPolicyInterrupter(mtm, vtm, templatemanager.NewCueManager(), tokenmanager.NewTokenManager())
 
 	type args struct {
 		obj    *unstructured.Unstructured
@@ -340,7 +341,7 @@ func Test_policyInterrupterImpl_OnMutating(t *testing.T) {
 		return
 	}
 
-	policyInterrupter := NewPolicyInterrupter(mtm, vtm, templatemanager.NewCueManager())
+	policyInterrupter := NewPolicyInterrupter(mtm, vtm, templatemanager.NewCueManager(), tokenmanager.NewTokenManager())
 
 	type args struct {
 		obj    *unstructured.Unstructured

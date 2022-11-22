@@ -55,14 +55,14 @@ type policyOverriders struct {
 }
 
 type overrideManagerImpl struct {
-	dynamicClient dynamiclister.DynamicResourceLister
+	dynamicLister dynamiclister.DynamicResourceLister
 	opLister      v1alpha1.OverridePolicyLister
 	copLister     v1alpha1.ClusterOverridePolicyLister
 }
 
 func NewOverrideManager(dynamicClient dynamiclister.DynamicResourceLister, copLister v1alpha1.ClusterOverridePolicyLister, opLister v1alpha1.OverridePolicyLister) OverrideManager {
 	return &overrideManagerImpl{
-		dynamicClient: dynamicClient,
+		dynamicLister: dynamicClient,
 		opLister:      opLister,
 		copLister:     copLister,
 	}
@@ -204,7 +204,7 @@ func (o *overrideManagerImpl) getOverridersFromOverridePolicies(policies []Gener
 // applyPolicyOverriders applies OverridePolicy/ClusterOverridePolicy overriders to target object
 func (o *overrideManagerImpl) applyPolicyOverriders(rawObj, oldObj *unstructured.Unstructured, overriders policyv1alpha1.Overriders) error {
 	if overriders.Template != nil && overriders.RenderedCue != "" {
-		p, err := cue.BuildCueParamsViaOverridePolicy(o.dynamicClient, rawObj, overriders.Template)
+		p, err := cue.BuildCueParamsViaOverridePolicy(o.dynamicLister, rawObj, overriders.Template)
 		if err != nil {
 			return fmt.Errorf("BuildCueParamsViaOverridePolicy error=%w", err)
 		}

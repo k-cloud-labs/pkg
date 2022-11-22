@@ -2,7 +2,6 @@ package cue
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -342,8 +341,8 @@ func getHttpResponse(c *http.Client, obj *unstructured.Unstructured, ref *policy
 	}
 
 	// check if request need auth
-	if ref.TokenAuth != nil {
-		token, err := httpAuth(c, ref.TokenAuth)
+	if ref.Auth != nil {
+		token, err := httpAuth(ref.Auth)
 		if err != nil {
 			return nil, err
 		}
@@ -373,40 +372,21 @@ type Auth struct {
 	Token string `json:"token"`
 }
 
-func httpAuth(hc *http.Client, a *policyv1alpha1.HttpRequestAuth) (token string, err error) {
+func httpAuth(a *policyv1alpha1.HttpRequestAuth) (token string, err error) {
 	if a == nil {
 		return "", errors.New("invalid auth")
 	}
 
-	req, err := http.NewRequest(http.MethodPost, a.AuthURL, nil)
-	if err != nil {
-		return "", nil
-	}
-	req.SetBasicAuth(a.Username, a.Password)
-
-	resp, err := hc.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer noErr(resp.Body.Close)
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+	if a.StaticToken != "" {
+		return a.StaticToken, nil
 	}
 
-	// got error
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("request auth token error, url=%v, statusCode=%v, respBody=%v",
-			a.AuthURL, resp.StatusCode, string(bodyBytes))
+	// maintain by token manager
+	if a.Token != "" {
+		return a.Token, nil
 	}
 
-	auth := new(Auth)
-	if err = json.Unmarshal(bodyBytes, auth); err != nil {
-		return
-	}
-
-	return auth.Token, nil
+	return "", errors.New("no available token")
 }
 
 func noErr(f func() error) {

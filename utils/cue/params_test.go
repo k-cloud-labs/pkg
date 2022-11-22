@@ -218,22 +218,21 @@ func Test_getHttpResponse(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "redirect",
+			name: "auth",
 			args: args{
 				obj: newBasicObj("name", "ns"),
 				ref: &policyv1alpha1.HttpDataRef{
 					URL:    "http://127.0.0.1:8090/api/v1/token",
 					Method: "GET",
-					TokenAuth: &policyv1alpha1.HttpRequestAuth{
-						Username: "policy_engine_bot",
-						Password: "policy_engine_bot",
-						AuthURL:  "http://127.0.0.1:8090/api/v1/auth",
+					Auth: &policyv1alpha1.HttpRequestAuth{
+						StaticToken: "static",
+						Token:       "dynamic",
 					},
 				},
 			},
 			want: map[string]any{
 				// data get from request header authorization
-				"body": "{\"token\":\"Bearer Basic cG9saWN5X2VuZ2luZV9ib3Q6cG9saWN5X2VuZ2luZV9ib3Q=\"}",
+				"body": "{\"token\":\"Bearer static\"}",
 			},
 			wantErr: false,
 		},

@@ -215,6 +215,57 @@ spec:
                                 http:
                                   description: Http means refer data from remote api.
                                   properties:
+                                    auth:
+                                      description: 'Auth defines basic info for get
+                                        authorization token before do request. Note:
+                                        it will request authURL with post and `Header.Set("Authorization",
+                                        "Basic "+basicAuth(username, password))` and
+                                        get token from response body. Response Body
+                                        must be a valid json and contains token like
+                                        this: `{"token": "xxx"} . After get the token,
+                                        the request will add a new key value to header,
+                                        key is "Authorization" and value is "Bearer
+                                        xxx".'
+                                      properties:
+                                        authUrl:
+                                          description: AuthURL represents remote url
+                                            to request and get token.
+                                          type: string
+                                        expireAt:
+                                          description: ExpireAt sores the token expire
+                                            time. Same as above field, this field
+                                            also updated automatically. This filed
+                                            is not fill by user, so don't edit it.
+                                          format: date-time
+                                          type: string
+                                        expireDuration:
+                                          description: ExpireDuration is providing
+                                            for some auth api won't return exact expire
+                                            time, so can you this field set an expiry
+                                            duration for token
+                                          type: string
+                                        password:
+                                          description: Password represents Password
+                                            for auth.
+                                          type: string
+                                        staticToken:
+                                          description: StaticToken represents for
+                                            static token for call api instead of get
+                                            token from remote api. StaticToken and
+                                            other fields are mutually exclusive, staticToken
+                                            is priority to take effect.
+                                          type: string
+                                        token:
+                                          description: Token stores the latest token
+                                            get from AuthURL, and it'll be updated
+                                            when token expired. This filed is not
+                                            fill by user, so don't edit it.
+                                          type: string
+                                        username:
+                                          description: Username represents username
+                                            for auth.
+                                          type: string
+                                      type: object
                                     body:
                                       description: Body represents the json body when
                                         http method is POST.
@@ -229,31 +280,6 @@ spec:
                                       description: Method as basic http method(e.g.
                                         GET or POST)
                                       type: string
-                                    oAuth2:
-                                      description: 'TokenAuth defines basic info for
-                                        get authorization token before do request.
-                                        Note: it will request authURL with post and
-                                        `Header.Set("Authorization", "Basic "+basicAuth(username,
-                                        password))` and get token from response body.
-                                        Response Body must be a valid json and contains
-                                        token like this: `{"token": "xxx"} . After
-                                        get the token, the request will add a new
-                                        key value to header, key is "Authorization"
-                                        and value is "Bearer xxx".'
-                                      properties:
-                                        authUrl:
-                                          description: AuthURL represents remote url
-                                            to request and get token.
-                                          type: string
-                                        password:
-                                          description: Password represents Password
-                                            for auth.
-                                          type: string
-                                        username:
-                                          description: Username represents username
-                                            for auth.
-                                          type: string
-                                      type: object
                                     params:
                                       additionalProperties:
                                         type: string
@@ -448,6 +474,57 @@ spec:
                                 http:
                                   description: Http means refer data from remote api.
                                   properties:
+                                    auth:
+                                      description: 'Auth defines basic info for get
+                                        authorization token before do request. Note:
+                                        it will request authURL with post and `Header.Set("Authorization",
+                                        "Basic "+basicAuth(username, password))` and
+                                        get token from response body. Response Body
+                                        must be a valid json and contains token like
+                                        this: `{"token": "xxx"} . After get the token,
+                                        the request will add a new key value to header,
+                                        key is "Authorization" and value is "Bearer
+                                        xxx".'
+                                      properties:
+                                        authUrl:
+                                          description: AuthURL represents remote url
+                                            to request and get token.
+                                          type: string
+                                        expireAt:
+                                          description: ExpireAt sores the token expire
+                                            time. Same as above field, this field
+                                            also updated automatically. This filed
+                                            is not fill by user, so don't edit it.
+                                          format: date-time
+                                          type: string
+                                        expireDuration:
+                                          description: ExpireDuration is providing
+                                            for some auth api won't return exact expire
+                                            time, so can you this field set an expiry
+                                            duration for token
+                                          type: string
+                                        password:
+                                          description: Password represents Password
+                                            for auth.
+                                          type: string
+                                        staticToken:
+                                          description: StaticToken represents for
+                                            static token for call api instead of get
+                                            token from remote api. StaticToken and
+                                            other fields are mutually exclusive, staticToken
+                                            is priority to take effect.
+                                          type: string
+                                        token:
+                                          description: Token stores the latest token
+                                            get from AuthURL, and it'll be updated
+                                            when token expired. This filed is not
+                                            fill by user, so don't edit it.
+                                          type: string
+                                        username:
+                                          description: Username represents username
+                                            for auth.
+                                          type: string
+                                      type: object
                                     body:
                                       description: Body represents the json body when
                                         http method is POST.
@@ -462,31 +539,6 @@ spec:
                                       description: Method as basic http method(e.g.
                                         GET or POST)
                                       type: string
-                                    oAuth2:
-                                      description: 'TokenAuth defines basic info for
-                                        get authorization token before do request.
-                                        Note: it will request authURL with post and
-                                        `Header.Set("Authorization", "Basic "+basicAuth(username,
-                                        password))` and get token from response body.
-                                        Response Body must be a valid json and contains
-                                        token like this: `{"token": "xxx"} . After
-                                        get the token, the request will add a new
-                                        key value to header, key is "Authorization"
-                                        and value is "Bearer xxx".'
-                                      properties:
-                                        authUrl:
-                                          description: AuthURL represents remote url
-                                            to request and get token.
-                                          type: string
-                                        password:
-                                          description: Password represents Password
-                                            for auth.
-                                          type: string
-                                        username:
-                                          description: Username represents username
-                                            for auth.
-                                          type: string
-                                      type: object
                                     params:
                                       additionalProperties:
                                         type: string
@@ -643,6 +695,57 @@ spec:
                                 http:
                                   description: Http means refer data from remote api.
                                   properties:
+                                    auth:
+                                      description: 'Auth defines basic info for get
+                                        authorization token before do request. Note:
+                                        it will request authURL with post and `Header.Set("Authorization",
+                                        "Basic "+basicAuth(username, password))` and
+                                        get token from response body. Response Body
+                                        must be a valid json and contains token like
+                                        this: `{"token": "xxx"} . After get the token,
+                                        the request will add a new key value to header,
+                                        key is "Authorization" and value is "Bearer
+                                        xxx".'
+                                      properties:
+                                        authUrl:
+                                          description: AuthURL represents remote url
+                                            to request and get token.
+                                          type: string
+                                        expireAt:
+                                          description: ExpireAt sores the token expire
+                                            time. Same as above field, this field
+                                            also updated automatically. This filed
+                                            is not fill by user, so don't edit it.
+                                          format: date-time
+                                          type: string
+                                        expireDuration:
+                                          description: ExpireDuration is providing
+                                            for some auth api won't return exact expire
+                                            time, so can you this field set an expiry
+                                            duration for token
+                                          type: string
+                                        password:
+                                          description: Password represents Password
+                                            for auth.
+                                          type: string
+                                        staticToken:
+                                          description: StaticToken represents for
+                                            static token for call api instead of get
+                                            token from remote api. StaticToken and
+                                            other fields are mutually exclusive, staticToken
+                                            is priority to take effect.
+                                          type: string
+                                        token:
+                                          description: Token stores the latest token
+                                            get from AuthURL, and it'll be updated
+                                            when token expired. This filed is not
+                                            fill by user, so don't edit it.
+                                          type: string
+                                        username:
+                                          description: Username represents username
+                                            for auth.
+                                          type: string
+                                      type: object
                                     body:
                                       description: Body represents the json body when
                                         http method is POST.
@@ -657,31 +760,6 @@ spec:
                                       description: Method as basic http method(e.g.
                                         GET or POST)
                                       type: string
-                                    oAuth2:
-                                      description: 'TokenAuth defines basic info for
-                                        get authorization token before do request.
-                                        Note: it will request authURL with post and
-                                        `Header.Set("Authorization", "Basic "+basicAuth(username,
-                                        password))` and get token from response body.
-                                        Response Body must be a valid json and contains
-                                        token like this: `{"token": "xxx"} . After
-                                        get the token, the request will add a new
-                                        key value to header, key is "Authorization"
-                                        and value is "Bearer xxx".'
-                                      properties:
-                                        authUrl:
-                                          description: AuthURL represents remote url
-                                            to request and get token.
-                                          type: string
-                                        password:
-                                          description: Password represents Password
-                                            for auth.
-                                          type: string
-                                        username:
-                                          description: Username represents username
-                                            for auth.
-                                          type: string
-                                      type: object
                                     params:
                                       additionalProperties:
                                         type: string
