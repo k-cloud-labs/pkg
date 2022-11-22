@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -333,7 +334,12 @@ func getHttpResponse(c *http.Client, obj *unstructured.Unstructured, ref *policy
 		params = "?" + query.Encode()
 	}
 
-	req, err := http.NewRequest(ref.Method, ref.URL+params, body)
+	refUrl, err := parseAndGetRefValue(ref.URL, obj)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(ref.Method, refUrl+params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -413,12 +419,24 @@ func noErr(f func() error) {
 	_ = f()
 }
 
-func parseAndGetRefValue(refKey string, obj *unstructured.Unstructured) (string, error) {
-	if !(strings.HasPrefix(refKey, "{{") && strings.HasSuffix(refKey, "}}")) {
-		return refKey, nil // not ref
+var (
+	matchRef = regexp.MustCompilePOSIX(`\{\{(.*?)\}\}`)
+)
+
+func matchRefValue(s string) string {
+	result := matchRef.FindStringSubmatch(s)
+	if len(result) > 1 {
+		return result[1]
 	}
 
-	key := strings.TrimPrefix(strings.TrimSuffix(refKey, "}}"), "{{")
+	return ""
+}
+
+func parseAndGetRefValue(refKey string, obj *unstructured.Unstructured) (string, error) {
+	key := matchRefValue(refKey)
+	if key == "" {
+		return refKey, nil
+	}
 
 	v, ok, err := unstructured.NestedString(obj.Object, strings.Split(key, ".")...)
 	if err != nil {
@@ -431,5 +449,5 @@ func parseAndGetRefValue(refKey string, obj *unstructured.Unstructured) (string,
 		return "", errors.New("get reference value from current object is not string")
 	}
 
-	return v, nil
+	return strings.Replace(refKey, fmt.Sprintf("{{%s}}", key), v, 1), nil
 }

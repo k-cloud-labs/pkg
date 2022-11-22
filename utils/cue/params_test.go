@@ -61,6 +61,16 @@ func Test_parseAndGetRefValue(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "normal3",
+			args: args{
+				refKey: "https://xxxx.com/{{metadata.namespace}}",
+				keys:   []string{"metadata", "namespace"},
+				value:  "ns",
+			},
+			want:    "https://xxxx.com/ns",
+			wantErr: false,
+		},
+		{
 			name: "error",
 			args: args{
 				refKey: "{{metadata.name}}",
@@ -873,6 +883,32 @@ func TestBuildCueParamsViaValidatePolicy(t *testing.T) {
 			}
 			if !equalExtraParams(got.ExtraParams, tt.want.ExtraParams, tt.args.keySuffix) {
 				t.Errorf("BuildCueParamsViaOverridePolicy() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_matchRefValue(t *testing.T) {
+	type args struct {
+		s string
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "1",
+			args: args{
+				s: "abc{{xx}}",
+			},
+			want: "xx",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := matchRefValue(tt.args.s); got != tt.want {
+				t.Errorf("matchRefValue() = %v, want %v", got, tt.want)
 			}
 		})
 	}
