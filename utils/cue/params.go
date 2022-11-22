@@ -342,8 +342,8 @@ func getHttpResponse(c *http.Client, obj *unstructured.Unstructured, ref *policy
 	}
 
 	// check if request need auth
-	if ref.TokenAuth != nil {
-		token, err := httpAuth(c, ref.TokenAuth)
+	if ref.Auth != nil {
+		token, err := httpAuth(c, ref.Auth)
 		if err != nil {
 			return nil, err
 		}

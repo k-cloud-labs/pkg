@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -54,37 +55,59 @@ func NewFakeDynamicResourceLister(done <-chan struct{}, objects ...runtime.Objec
 	return d, nil
 }
 
-func (d *FakeResourceListerImpl) RegisterNewResource(gvk schema.GroupVersionKind, waitForSync bool) bool {
-	gvr, err := d.gvk2Gvr(gvk)
-	if err != nil {
-		return false
+func (d *FakeResourceListerImpl) RegisterNewResource(waitForSync bool, gvkList ...schema.GroupVersionKind) error {
+	type gvk2Lister struct {
+		gvk    schema.GroupVersionKind
+		lister cache.GenericLister
+	}
+	newResources := make(map[schema.GroupVersionResource]gvk2Lister)
+	for _, gvk := range gvkList {
+		_, ok := d.listerMap.Load(gvk.String())
+		if ok {
+			continue
+		}
+
+		gvr, err := d.gvk2Gvr(gvk)
+		if err != nil {
+			return err
+		}
+
+		newResources[gvr] = gvk2Lister{
+			gvk:    gvk,
+			lister: d.informer.Lister(gvr),
+		}
 	}
 
-	_, ok := d.listerMap.Load(gvr.String())
-	if ok {
-		return true
+	if len(newResources) == 0 {
+		return nil // no new resources
 	}
 
-	// not found try to create new lister
-	lister := d.informer.Lister(gvr)
 	d.informer.Start()
-	if waitForSync {
-		d.informer.WaitForCacheSync()
+	if !waitForSync {
+		return nil
 	}
-	d.listerMap.Store(gvr.String(), lister)
-	return true
+
+	cacheMap := d.informer.WaitForCacheSync()
+	for gvr, gl := range newResources {
+		if !cacheMap[gvr] {
+			return fmt.Errorf("sync resource(%v) failed", gvr.String())
+		}
+		d.listerMap.Store(gl.gvk.String(), gl.lister)
+	}
+
+	return nil
 }
 
 func (d *FakeResourceListerImpl) GVKToResourceLister(gvk schema.GroupVersionKind) (cache.GenericLister, error) {
-	gvr, err := d.gvk2Gvr(gvk)
-	if err != nil {
-		return nil, err
-	}
-
-	v, ok := d.listerMap.Load(gvr.String())
+	v, ok := d.listerMap.Load(gvk.String())
 	if ok {
 		klog.Info("loaded exist lister")
 		return v.(cache.GenericLister), nil
+	}
+
+	gvr, err := d.gvk2Gvr(gvk)
+	if err != nil {
+		return nil, err
 	}
 
 	return &simpleLister{

@@ -224,11 +224,11 @@ type HttpDataRef struct {
 	// Body represents the json body when http method is POST.
 	// +optional
 	Body apiextensionsv1.JSON `json:"body,omitempty"`
-	// TokenAuth defines basic info for get authorization token before do request.
+	// Auth defines basic info for get authorization token before do request.
 	// Note: it will request authURL with post and `Header.Set("Authorization", "Basic "+basicAuth(username, password))`
 	//  and get token from response body. Response Body must be a valid json and contains token like this: `{"token": "xxx"} .
 	//	After get the token, the request will add a new key value to header, key is "Authorization" and value is "Bearer xxx".
-	TokenAuth *HttpRequestAuth `json:"oAuth2,omitempty"`
+	Auth *HttpRequestAuth `json:"auth,omitempty"`
 }
 
 // HttpRequestAuth defines basic info for get auth token from remote api

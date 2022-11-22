@@ -224,7 +224,7 @@ func Test_getHttpResponse(t *testing.T) {
 				ref: &policyv1alpha1.HttpDataRef{
 					URL:    "http://127.0.0.1:8090/api/v1/token",
 					Method: "GET",
-					TokenAuth: &policyv1alpha1.HttpRequestAuth{
+					Auth: &policyv1alpha1.HttpRequestAuth{
 						Username: "policy_engine_bot",
 						Password: "policy_engine_bot",
 						AuthURL:  "http://127.0.0.1:8090/api/v1/auth",

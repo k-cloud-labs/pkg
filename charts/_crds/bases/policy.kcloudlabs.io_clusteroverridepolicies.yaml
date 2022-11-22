@@ -1284,31 +1284,17 @@ spec:
                                 http:
                                   description: Http means refer data from remote api.
                                   properties:
-                                    body:
-                                      description: Body represents the json body when
-                                        http method is POST.
-                                      x-kubernetes-preserve-unknown-fields: true
-                                    header:
-                                      additionalProperties:
-                                        type: string
-                                      description: Header represents the custom header
-                                        added to http request header.
-                                      type: object
-                                    method:
-                                      description: Method as basic http method(e.g.
-                                        GET or POST)
-                                      type: string
-                                    oAuth2:
-                                      description: 'TokenAuth defines basic info for
-                                        get authorization token before do request.
-                                        Note: it will request authURL with post and
-                                        `Header.Set("Authorization", "Basic "+basicAuth(username,
-                                        password))` and get token from response body.
-                                        Response Body must be a valid json and contains
-                                        token like this: `{"token": "xxx"} . After
-                                        get the token, the request will add a new
-                                        key value to header, key is "Authorization"
-                                        and value is "Bearer xxx".'
+                                    auth:
+                                      description: 'Auth defines basic info for get
+                                        authorization token before do request. Note:
+                                        it will request authURL with post and `Header.Set("Authorization",
+                                        "Basic "+basicAuth(username, password))` and
+                                        get token from response body. Response Body
+                                        must be a valid json and contains token like
+                                        this: `{"token": "xxx"} . After get the token,
+                                        the request will add a new key value to header,
+                                        key is "Authorization" and value is "Bearer
+                                        xxx".'
                                       properties:
                                         authUrl:
                                           description: AuthURL represents remote url
@@ -1323,6 +1309,20 @@ spec:
                                             for auth.
                                           type: string
                                       type: object
+                                    body:
+                                      description: Body represents the json body when
+                                        http method is POST.
+                                      x-kubernetes-preserve-unknown-fields: true
+                                    header:
+                                      additionalProperties:
+                                        type: string
+                                      description: Header represents the custom header
+                                        added to http request header.
+                                      type: object
+                                    method:
+                                      description: Method as basic http method(e.g.
+                                        GET or POST)
+                                      type: string
                                     params:
                                       additionalProperties:
                                         type: string

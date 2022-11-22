@@ -249,8 +249,8 @@ func (in *HttpDataRef) DeepCopyInto(out *HttpDataRef) {
 		}
 	}
 	in.Body.DeepCopyInto(&out.Body)
-	if in.TokenAuth != nil {
-		in, out := &in.TokenAuth, &out.TokenAuth
+	if in.Auth != nil {
+		in, out := &in.Auth, &out.Auth
 		*out = new(HttpRequestAuth)
 		**out = **in
 	}
