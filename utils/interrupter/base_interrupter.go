@@ -65,18 +65,23 @@ func (i *baseInterrupter) renderAndFormat(data any) (b []byte, err error) {
 
 func trimBlankLine(data []byte) []byte {
 	s := bufio.NewScanner(bytes.NewBuffer(data))
-	var result = &bytes.Buffer{}
+	var buf = &bytes.Buffer{}
 	for s.Scan() {
 		line := s.Text()
 		if len(strings.TrimSpace(line)) == 0 {
 			continue
 		}
 
-		result.Write(s.Bytes())
-		result.WriteByte('\n')
+		buf.Write(s.Bytes())
+		buf.WriteByte('\n')
 	}
 
-	return result.Bytes()
+	result := buf.Bytes()
+	if len(result) > 1 {
+		result = result[:len(result)-1]
+	}
+
+	return result
 }
 
 func convertToPolicy(u *unstructured.Unstructured, data any) error {

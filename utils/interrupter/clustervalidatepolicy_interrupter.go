@@ -206,7 +206,7 @@ func (v *clusterValidatePolicyInterrupter) pickTokenRefFromValidateTemplate(poli
 	}
 
 	checkAndAppend := func(ref *policyv1alpha1.HttpDataRef, tokenPath, expirePath string) error {
-		tg, err := getTokenGeneratorFromRef(tmpl.Condition.DataRef.Http)
+		tg, err := getTokenGeneratorFromRef(ref)
 		if err != nil {
 			return err
 		}

@@ -52,7 +52,7 @@ func (p *policyInterrupterImpl) OnValidating(obj, oldObj *unstructured.Unstructu
 
 func (p *policyInterrupterImpl) isKnownPolicy(obj *unstructured.Unstructured) bool {
 	group := strings.Split(obj.GetAPIVersion(), "/")[0]
-	return group != policyv1alpha1.SchemeGroupVersion.Group
+	return group == policyv1alpha1.SchemeGroupVersion.Group
 }
 
 func (p *policyInterrupterImpl) getInterrupter(obj *unstructured.Unstructured) PolicyInterrupter {
