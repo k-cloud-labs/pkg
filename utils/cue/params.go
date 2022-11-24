@@ -333,7 +333,11 @@ func getHttpResponse(c *http.Client, obj *unstructured.Unstructured, ref *policy
 		params = "?" + query.Encode()
 	}
 
-	req, err := http.NewRequest(ref.Method, ref.URL+params, body)
+	refUrl, err := parseAndGetRefValue(ref.URL, obj)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(ref.Method, refUrl+params, body)
 	if err != nil {
 		return nil, err
 	}
