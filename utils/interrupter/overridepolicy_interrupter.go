@@ -49,7 +49,7 @@ func (o *overridePolicyInterrupter) OnMutating(obj, oldObj *unstructured.Unstruc
 		}
 	}
 
-	patches, err := o.patchOverridePolicy(op)
+	patches, err := o.patchOverridePolicy(op, operation)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,11 @@ func (o *overridePolicyInterrupter) validateOverridePolicy(objSpec *policyv1alph
 	return nil
 }
 
-func (o *overridePolicyInterrupter) patchOverridePolicy(policy *policyv1alpha1.OverridePolicy) ([]jsonpatchv2.JsonPatchOperation, error) {
+func (o *overridePolicyInterrupter) patchOverridePolicy(policy *policyv1alpha1.OverridePolicy, operation admissionv1.Operation) ([]jsonpatchv2.JsonPatchOperation, error) {
+	if operation == admissionv1.Delete {
+		return nil, nil
+	}
+
 	patches := make([]jsonpatchv2.JsonPatchOperation, 0)
 	for i, overrideRule := range policy.Spec.OverrideRules {
 		if overrideRule.Overriders.Template == nil {

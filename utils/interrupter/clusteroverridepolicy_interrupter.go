@@ -40,7 +40,7 @@ func (c *clusterOverridePolicyInterrupter) OnMutating(obj, oldObj *unstructured.
 		}
 	}
 
-	patches, err := c.patchOverridePolicy(cop)
+	patches, err := c.patchOverridePolicy(cop, operation)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,11 @@ func NewClusterOverridePolicyInterrupter(opInterrupter PolicyInterrupter, lister
 	}
 }
 
-func (c *clusterOverridePolicyInterrupter) patchOverridePolicy(policy *policyv1alpha1.ClusterOverridePolicy) ([]jsonpatchv2.JsonPatchOperation, error) {
+func (c *clusterOverridePolicyInterrupter) patchOverridePolicy(policy *policyv1alpha1.ClusterOverridePolicy, operation admissionv1.Operation) ([]jsonpatchv2.JsonPatchOperation, error) {
+	if operation == admissionv1.Delete {
+		return nil, nil
+	}
+
 	patches := make([]jsonpatchv2.JsonPatchOperation, 0)
 	for i, overrideRule := range policy.Spec.OverrideRules {
 		if overrideRule.Overriders.Template == nil {

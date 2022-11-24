@@ -195,8 +195,9 @@ func Test_policyInterrupterImpl_OnMutating(t *testing.T) {
 	}
 
 	type args struct {
-		obj    *unstructured.Unstructured
-		oldObj *unstructured.Unstructured
+		obj       *unstructured.Unstructured
+		oldObj    *unstructured.Unstructured
+		operation admissionv1.Operation
 	}
 	tests := []struct {
 		name    string
@@ -207,6 +208,7 @@ func Test_policyInterrupterImpl_OnMutating(t *testing.T) {
 		{
 			name: "1",
 			args: args{
+				operation: admissionv1.Create,
 				obj: &unstructured.Unstructured{Object: map[string]any{
 					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
 					"kind":       "OverridePolicy",
@@ -321,8 +323,58 @@ patches: list.FlattenN(unFlattenPatches, -1)
 			wantErr: false,
 		},
 		{
+			name: "1.1",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "OverridePolicy",
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"value": map[string]any{
+											"string": "cue",
+										},
+									},
+								},
+							},
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"valueRef": map[string]any{
+											"from": "http",
+											"path": "body.name",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
 			name: "2",
 			args: args{
+				operation: admissionv1.Create,
 				obj: &unstructured.Unstructured{Object: map[string]any{
 					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
 					"kind":       "ClusterOverridePolicy",
@@ -437,8 +489,58 @@ patches: list.FlattenN(unFlattenPatches, -1)
 			wantErr: false,
 		},
 		{
+			name: "2.1",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterOverridePolicy",
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"value": map[string]any{
+											"string": "cue",
+										},
+									},
+								},
+							},
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"valueRef": map[string]any{
+											"from": "http",
+											"path": "body.name",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
 			name: "3",
 			args: args{
+				operation: admissionv1.Create,
 				obj: &unstructured.Unstructured{Object: map[string]any{
 					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
 					"kind":       "ClusterValidatePolicy",
@@ -548,8 +650,74 @@ validate: {
 			wantErr: false,
 		},
 		{
+			name: "3.1",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
+							{
+								"template": map[string]any{
+									"type": "condition",
+									"condition": map[string]any{
+										"message": "forbidden",
+										"cond":    "Gte",
+										"dataRef": map[string]any{
+											"from": "current",
+											"path": "/spec/replica",
+										},
+										"value": map[string]any{
+											"integer": 1,
+										},
+									},
+								},
+							},
+							{
+								"template": map[string]any{
+									"type": "condition",
+									"condition": map[string]any{
+										"message": "forbidden",
+										"cond":    "Equal",
+										"dataRef": map[string]any{
+											"from": "http",
+											"path": "body.origin",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+										"valueRef": map[string]any{
+											"from": "http",
+											"path": "body.target",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
 			name: "4",
 			args: args{
+				operation: admissionv1.Create,
 				obj: &unstructured.Unstructured{Object: map[string]any{
 					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
 					"kind":       "ClusterValidatePolicy",
@@ -603,8 +771,33 @@ validate: {
 			wantErr: false,
 		},
 		{
+			name: "4.1",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
+							{
+								"template": map[string]any{
+									"type": "pab",
+									"podAvailableBadge": map[string]any{
+										"maxUnavailable": "60%",
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
 			name: "5",
 			args: args{
+				operation: admissionv1.Create,
 				obj: &unstructured.Unstructured{Object: map[string]any{
 					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
 					"kind":       "ClusterValidatePolicy",
@@ -661,11 +854,48 @@ validate: {
 			},
 			wantErr: false,
 		},
+		{
+			name: "5.1",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
+							{
+								"template": map[string]any{
+									"type": "pab",
+									"podAvailableBadge": map[string]any{
+										"maxUnavailable": "60%",
+										"replicaReference": map[string]any{
+											"from":               "http",
+											"targetReplicaPath":  "body.target",
+											"currentReplicaPath": "body.origin",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want:    nil,
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			got, err := policyInterrupter.OnMutating(tt.args.obj, tt.args.oldObj, admissionv1.Create)
+			got, err := policyInterrupter.OnMutating(tt.args.obj, tt.args.oldObj, tt.args.operation)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("OnMutating() error = %v, wantErr %v", err, tt.wantErr)
 				return

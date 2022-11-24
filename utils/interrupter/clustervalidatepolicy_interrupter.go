@@ -49,7 +49,7 @@ func (v *clusterValidatePolicyInterrupter) OnMutating(obj, oldObj *unstructured.
 		}
 	}
 
-	patches, err := v.patchClusterValidatePolicy(cvp)
+	patches, err := v.patchClusterValidatePolicy(cvp, operation)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,11 @@ func (v *clusterValidatePolicyInterrupter) validateClusterValidatePolicy(obj *po
 	return nil
 }
 
-func (v *clusterValidatePolicyInterrupter) patchClusterValidatePolicy(policy *policyv1alpha1.ClusterValidatePolicy) ([]jsonpatchv2.JsonPatchOperation, error) {
+func (v *clusterValidatePolicyInterrupter) patchClusterValidatePolicy(policy *policyv1alpha1.ClusterValidatePolicy, operation admissionv1.Operation) ([]jsonpatchv2.JsonPatchOperation, error) {
+	if operation == admissionv1.Delete {
+		return nil, nil
+	}
+
 	patches := make([]jsonpatchv2.JsonPatchOperation, 0)
 	for i, validateRule := range policy.Spec.ValidateRules {
 		if validateRule.Template == nil {
