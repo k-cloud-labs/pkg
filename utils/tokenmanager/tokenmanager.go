@@ -19,7 +19,7 @@ type TokenManager interface {
 	// AddToken add new token to manager
 	AddToken(TokenGenerator, IdentifiedCallback)
 	// RemoveToken stops maintaining process of given token and remove it from cache.
-	RemoveToken(tg TokenGenerator, ic IdentifiedCallback) error
+	RemoveToken(tg TokenGenerator, ic IdentifiedCallback)
 	// Stop stops all token maintaining and clean the cache, don't use this manager after call Stop.
 	Stop()
 }
@@ -50,35 +50,29 @@ func (t *tokenManagerImpl) AddToken(generator TokenGenerator, ic IdentifiedCallb
 	}
 }
 
-func (t *tokenManagerImpl) RemoveToken(generator TokenGenerator, ic IdentifiedCallback) error {
+func (t *tokenManagerImpl) RemoveToken(tg TokenGenerator, ic IdentifiedCallback) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	info, ok := t.tokenMap[generator.ID()]
+	info, ok := t.tokenMap[tg.ID()]
 	if !ok {
-		return nil
+		return
 	}
 
 	if lastOne := info.removeCallback(ic); !lastOne {
-		return nil
+		return
 	}
 
-	// no more callback, stop maintain token
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*50)
-	defer cancel()
-	return info.stop(ctx.Done())
+	go info.stop() // block channel
 }
 
 func (t *tokenManagerImpl) Stop() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
 	for id, maintainer := range t.tokenMap {
-		if err := maintainer.stop(ctx.Done()); err != nil {
-			klog.ErrorS(err, "stop token maintainer failed", "id", id)
-		}
+		klog.V(4).InfoS("stopping token maintain", "tokenID", id)
+		maintainer.stop()
 	}
 
 	t.tokenMap = nil
@@ -105,6 +99,10 @@ type tokenMaintainer struct {
 }
 
 func (t *tokenMaintainer) updateCallbacks(ic IdentifiedCallback) {
+	if ic == nil {
+		return
+	}
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -117,10 +115,13 @@ func (t *tokenMaintainer) callback() {
 
 	for id, cb := range t.callbacks {
 		if err := cb.Callback(t.token, t.expireAt); err != nil {
-			go retry(func() error {
-				return cb.Callback(t.token, t.expireAt)
-			}, 3, time.Millisecond*100)
-
+			go func() {
+				if retryErr := retry(func() error {
+					return cb.Callback(t.token, t.expireAt)
+				}, 3, time.Millisecond*100); retryErr != nil {
+					klog.ErrorS(err, "retry callback failed", "id", id)
+				}
+			}()
 			klog.ErrorS(err, "call refresh token callback error", "id", id)
 		}
 	}
@@ -135,13 +136,8 @@ func (t *tokenMaintainer) removeCallback(ic IdentifiedCallback) bool {
 	return len(t.callbacks) == 0
 }
 
-func (t *tokenMaintainer) stop(wait <-chan struct{}) error {
-	select {
-	case t.stopChan <- struct{}{}:
-		return nil
-	case <-wait:
-		return errors.New("stop token maintain timeout")
-	}
+func (t *tokenMaintainer) stop() {
+	t.stopChan <- struct{}{}
 }
 
 func (t *tokenMaintainer) refreshToken() error {
@@ -153,7 +149,7 @@ func (t *tokenMaintainer) refreshToken() error {
 
 	t.fetchedAt = time.Now()
 	// token must be at least valid for one minute
-	if expireAt.Before(t.fetchedAt) || expireAt.Sub(t.fetchedAt).Minutes() < 1 {
+	if expireAt.Before(t.fetchedAt) || expireAt.Sub(t.fetchedAt).Seconds() < 60 {
 		return errors.New("token valid duration too short or expired already, please extend the valid time")
 	}
 
@@ -173,12 +169,27 @@ func (t *tokenMaintainer) refreshAndCallback() error {
 }
 
 func (t *tokenMaintainer) daemon() {
+	// attempt to refresh token when it started.
+loop:
+	for {
+		select {
+		case <-t.stopChan:
+			return
+		default:
+			err := t.refreshAndCallback()
+			if err == nil {
+				break loop
+			}
+			klog.ErrorS(err, "refresh token got error", "lastToken", t.token, "id", t.generator.ID())
+			time.Sleep(time.Millisecond * 100)
+		}
+	}
+
 	var (
 		expireSeconds = t.expireAt.Sub(t.fetchedAt).Seconds()
 		duration      = expireSeconds / 10
 		ticker        = time.NewTicker(time.Duration(duration) * time.Second)
 		heartBeat     = time.NewTicker(time.Second)
-		// attempt to refresh token when it started.
 		refreshFailed = true
 	)
 
@@ -192,37 +203,34 @@ func (t *tokenMaintainer) daemon() {
 				refreshFailed = true
 				continue
 			}
-		default:
-		}
-
-		// refreshFailed default value is true, so it will refresh token at first here
-		if refreshFailed {
-			if err := t.refreshAndCallback(); err != nil {
-				klog.ErrorS(err, "refresh token got error", "lastToken", t.token, "id", t.generator.ID())
-				time.Sleep(time.Millisecond * 10) // wait for 10ms before next call
-				continue
+		case <-heartBeat.C:
+			// refreshFailed default value is true, so it will refresh token at first here
+			if refreshFailed {
+				// will retry 3 times inside
+				if err := t.refreshAndCallback(); err != nil {
+					klog.ErrorS(err, "refresh token got error", "lastToken", t.token, "id", t.generator.ID())
+					continue
+				}
+				// reset
+				refreshFailed = false
 			}
-			// reset
-			refreshFailed = false
 		}
-
-		// heart beat
-		// wait for heart beat if there are nothing happen.
-		<-heartBeat.C
 	}
 }
 
-func retry(f func() error, retryTimes int, interval time.Duration) {
+func retry(f func() error, retryTimes int, interval time.Duration) error {
 	var (
 		count int
+		err   error
 	)
 retry:
 	if count >= retryTimes {
-		return
+		klog.ErrorS(err, "retry failed", "retryTimes", count)
+		return err
 	}
 
-	if err := f(); err == nil {
-		return
+	if err = f(); err == nil {
+		return nil
 	}
 
 	count++

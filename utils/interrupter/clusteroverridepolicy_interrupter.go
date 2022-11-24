@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	jsonpatchv2 "gomodules.xyz/jsonpatch/v2"
+	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -17,7 +18,7 @@ type clusterOverridePolicyInterrupter struct {
 	lister v1alpha1.ClusterOverridePolicyLister
 }
 
-func (c *clusterOverridePolicyInterrupter) OnMutating(obj, oldObj *unstructured.Unstructured) ([]jsonpatchv2.JsonPatchOperation, error) {
+func (c *clusterOverridePolicyInterrupter) OnMutating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) ([]jsonpatchv2.JsonPatchOperation, error) {
 	cop := new(policyv1alpha1.ClusterOverridePolicy)
 	if err := convertToPolicy(obj, cop); err != nil {
 		return nil, err
@@ -39,10 +40,19 @@ func (c *clusterOverridePolicyInterrupter) OnMutating(obj, oldObj *unstructured.
 		}
 	}
 
-	return c.patchOverridePolicy(cop)
+	patches, err := c.patchOverridePolicy(cop)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = c.handleValueRef(cop, old, operation); err != nil {
+		return nil, err
+	}
+
+	return patches, nil
 }
 
-func (c *clusterOverridePolicyInterrupter) OnValidating(obj, oldObj *unstructured.Unstructured) error {
+func (c *clusterOverridePolicyInterrupter) OnValidating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) error {
 	cop := new(policyv1alpha1.ClusterOverridePolicy)
 	if err := convertToPolicy(obj, cop); err != nil {
 		return err
@@ -76,7 +86,6 @@ func NewClusterOverridePolicyInterrupter(opInterrupter PolicyInterrupter, lister
 
 func (c *clusterOverridePolicyInterrupter) patchOverridePolicy(policy *policyv1alpha1.ClusterOverridePolicy) ([]jsonpatchv2.JsonPatchOperation, error) {
 	patches := make([]jsonpatchv2.JsonPatchOperation, 0)
-	callbackMap := make(map[string]*tokenCallbackImpl)
 	for i, overrideRule := range policy.Spec.OverrideRules {
 		if overrideRule.Overriders.Template == nil {
 			continue
@@ -93,7 +102,54 @@ func (c *clusterOverridePolicyInterrupter) patchOverridePolicy(policy *policyv1a
 			Path:      fmt.Sprintf("/spec/overrideRules/%d/overriders/renderedCue", i),
 			Value:     string(b),
 		})
+	}
 
+	return patches, nil
+}
+
+func (c *clusterOverridePolicyInterrupter) handleValueRef(policy, oldPolicy *policyv1alpha1.ClusterOverridePolicy, operation admissionv1.Operation) error {
+	newCallbackMap, err := c.getTokenCallbackMap(policy)
+	if err != nil {
+		return err
+	}
+
+	if operation == admissionv1.Update && oldPolicy != nil {
+		oldCallbackMap, err := c.getTokenCallbackMap(oldPolicy)
+		if err != nil {
+			return err
+		}
+
+		// remove old and add new
+		for _, impl := range oldCallbackMap {
+			c.tokenManager.RemoveToken(impl.generator, impl)
+		}
+	}
+
+	if operation == admissionv1.Create || operation == admissionv1.Update {
+		for _, impl := range newCallbackMap {
+			c.tokenManager.AddToken(impl.generator, impl)
+		}
+		return nil
+	}
+
+	if operation == admissionv1.Delete {
+		for _, impl := range newCallbackMap {
+			c.tokenManager.RemoveToken(impl.generator, impl)
+		}
+		return nil
+	}
+
+	return nil
+}
+
+func (c *clusterOverridePolicyInterrupter) getTokenCallbackMap(policy *policyv1alpha1.ClusterOverridePolicy) (map[string]*tokenCallbackImpl, error) {
+	callbackMap := make(map[string]*tokenCallbackImpl)
+	for i, overrideRule := range policy.Spec.OverrideRules {
+		if overrideRule.Overriders.Template == nil {
+			continue
+		}
+
+		tmpl := overrideRule.Overriders.Template
 		if tmpl.ValueRef == nil || tmpl.ValueRef.Http == nil {
 			continue
 		}
@@ -120,12 +176,11 @@ func (c *clusterOverridePolicyInterrupter) patchOverridePolicy(policy *policyv1a
 	}
 
 	for _, impl := range callbackMap {
-		impl.id = fmt.Sprintf("%s/%s", policy.GroupVersionKind(), policy.Name)
+		impl.id = fmt.Sprintf("%s/%s/%s", policy.GroupVersionKind(), policy.Namespace, policy.Name)
 		impl.callback = c.genCallback(impl, policy.Namespace, policy.Name)
-		c.tokenManager.AddToken(impl.generator, impl)
 	}
 
-	return patches, nil
+	return callbackMap, nil
 }
 
 func (c *clusterOverridePolicyInterrupter) getPolicy(_, name string) (client.Object, error) {

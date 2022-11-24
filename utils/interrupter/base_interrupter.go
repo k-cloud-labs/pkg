@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	jsonpatchv2 "gomodules.xyz/jsonpatch/v2"
+	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/klog/v2"
 
@@ -22,12 +23,12 @@ type baseInterrupter struct {
 	cueManager              templatemanager.CueManager
 }
 
-func (i *baseInterrupter) OnMutating(obj, oldObj *unstructured.Unstructured) ([]jsonpatchv2.JsonPatchOperation, error) {
+func (i *baseInterrupter) OnMutating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) ([]jsonpatchv2.JsonPatchOperation, error) {
 	// do nothing, need override this method
 	return nil, nil
 }
 
-func (i *baseInterrupter) OnValidating(obj, oldObj *unstructured.Unstructured) error {
+func (i *baseInterrupter) OnValidating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) error {
 	// do nothing, need override this method
 	return nil
 }

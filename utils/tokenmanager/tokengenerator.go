@@ -111,7 +111,7 @@ func (tg *tokenGeneratorImpl) ID() string {
 }
 
 func (tg *tokenGeneratorImpl) getHost() (string, error) {
-	u, err := url.Parse(tg.authUrl)
+	u, err := url.ParseRequestURI(tg.authUrl)
 	if err != nil {
 		return "", err
 	}

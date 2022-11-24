@@ -8,6 +8,7 @@ import (
 	"time"
 
 	jsonpatchv2 "gomodules.xyz/jsonpatch/v2"
+	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,7 +27,7 @@ type overridePolicyInterrupter struct {
 	lister       v1alpha1.OverridePolicyLister
 }
 
-func (o *overridePolicyInterrupter) OnMutating(obj, oldObj *unstructured.Unstructured) ([]jsonpatchv2.JsonPatchOperation, error) {
+func (o *overridePolicyInterrupter) OnMutating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) ([]jsonpatchv2.JsonPatchOperation, error) {
 	op := new(policyv1alpha1.OverridePolicy)
 	if err := convertToPolicy(obj, op); err != nil {
 		return nil, err
@@ -48,10 +49,19 @@ func (o *overridePolicyInterrupter) OnMutating(obj, oldObj *unstructured.Unstruc
 		}
 	}
 
-	return o.patchOverridePolicy(op)
+	patches, err := o.patchOverridePolicy(op)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = o.handleValueRef(op, old, operation); err != nil {
+		return nil, err
+	}
+
+	return patches, nil
 }
 
-func (o *overridePolicyInterrupter) OnValidating(obj, oldObj *unstructured.Unstructured) error {
+func (o *overridePolicyInterrupter) OnValidating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) error {
 	op := new(policyv1alpha1.OverridePolicy)
 	if err := convertToPolicy(obj, op); err != nil {
 		return err
@@ -97,7 +107,6 @@ func (o *overridePolicyInterrupter) validateOverridePolicy(objSpec *policyv1alph
 
 func (o *overridePolicyInterrupter) patchOverridePolicy(policy *policyv1alpha1.OverridePolicy) ([]jsonpatchv2.JsonPatchOperation, error) {
 	patches := make([]jsonpatchv2.JsonPatchOperation, 0)
-	callbackMap := make(map[string]*tokenCallbackImpl)
 	for i, overrideRule := range policy.Spec.OverrideRules {
 		if overrideRule.Overriders.Template == nil {
 			continue
@@ -114,7 +123,54 @@ func (o *overridePolicyInterrupter) patchOverridePolicy(policy *policyv1alpha1.O
 			Path:      fmt.Sprintf("/spec/overrideRules/%d/overriders/renderedCue", i),
 			Value:     string(b),
 		})
+	}
 
+	return patches, nil
+}
+
+func (o *overridePolicyInterrupter) handleValueRef(policy, oldPolicy *policyv1alpha1.OverridePolicy, operation admissionv1.Operation) error {
+	newCallbackMap, err := o.getTokenCallbackMap(policy)
+	if err != nil {
+		return err
+	}
+
+	if operation == admissionv1.Update && oldPolicy != nil {
+		oldCallbackMap, err := o.getTokenCallbackMap(oldPolicy)
+		if err != nil {
+			return err
+		}
+
+		// remove old and add new
+		for _, impl := range oldCallbackMap {
+			o.tokenManager.RemoveToken(impl.generator, impl)
+		}
+	}
+
+	if operation == admissionv1.Create || operation == admissionv1.Update {
+		for _, impl := range newCallbackMap {
+			o.tokenManager.AddToken(impl.generator, impl)
+		}
+		return nil
+	}
+
+	if operation == admissionv1.Delete {
+		for _, impl := range newCallbackMap {
+			o.tokenManager.RemoveToken(impl.generator, impl)
+		}
+		return nil
+	}
+
+	return nil
+}
+
+func (o *overridePolicyInterrupter) getTokenCallbackMap(policy *policyv1alpha1.OverridePolicy) (map[string]*tokenCallbackImpl, error) {
+	callbackMap := make(map[string]*tokenCallbackImpl)
+	for i, overrideRule := range policy.Spec.OverrideRules {
+		if overrideRule.Overriders.Template == nil {
+			continue
+		}
+
+		tmpl := overrideRule.Overriders.Template
 		if tmpl.ValueRef == nil || tmpl.ValueRef.Http == nil {
 			continue
 		}
@@ -143,10 +199,9 @@ func (o *overridePolicyInterrupter) patchOverridePolicy(policy *policyv1alpha1.O
 	for _, impl := range callbackMap {
 		impl.id = fmt.Sprintf("%s/%s/%s", policy.GroupVersionKind(), policy.Namespace, policy.Name)
 		impl.callback = o.genCallback(impl, policy.Namespace, policy.Name)
-		o.tokenManager.AddToken(impl.generator, impl)
 	}
 
-	return patches, nil
+	return callbackMap, nil
 }
 
 func (o *overridePolicyInterrupter) getPolicy(namespace, name string) (client.Object, error) {

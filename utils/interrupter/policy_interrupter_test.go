@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	jsonpatchv2 "gomodules.xyz/jsonpatch/v2"
+	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -179,7 +180,7 @@ validate: {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := policyInterrupter.OnValidating(tt.args.obj, tt.args.oldObj); (err != nil) != tt.wantErr {
+			if err := policyInterrupter.OnValidating(tt.args.obj, tt.args.oldObj, admissionv1.Create); (err != nil) != tt.wantErr {
 				t.Errorf("OnValidating() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -664,7 +665,7 @@ validate: {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			got, err := policyInterrupter.OnMutating(tt.args.obj, tt.args.oldObj)
+			got, err := policyInterrupter.OnMutating(tt.args.obj, tt.args.oldObj, admissionv1.Create)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("OnMutating() error = %v, wantErr %v", err, tt.wantErr)
 				return

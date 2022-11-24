@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	jsonpatchv2 "gomodules.xyz/jsonpatch/v2"
+	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -24,27 +25,27 @@ type PolicyInterrupterManager interface {
 type PolicyInterrupter interface {
 	// OnMutating called on "/mutating" api to complete policy
 	// return nil means obj is not defined policy
-	OnMutating(obj, oldObj *unstructured.Unstructured) ([]jsonpatchv2.JsonPatchOperation, error)
+	OnMutating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) ([]jsonpatchv2.JsonPatchOperation, error)
 	// OnValidating called on "/validating" api to validate policy
 	// return nil means obj is not defined policy or no invalid field
-	OnValidating(obj, oldObj *unstructured.Unstructured) error
+	OnValidating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) error
 }
 
 type policyInterrupterImpl struct {
 	interrupters sync.Map
 }
 
-func (p *policyInterrupterImpl) OnMutating(obj, oldObj *unstructured.Unstructured) ([]jsonpatchv2.JsonPatchOperation, error) {
+func (p *policyInterrupterImpl) OnMutating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) ([]jsonpatchv2.JsonPatchOperation, error) {
 	if interrupter := p.getInterrupter(obj); interrupter != nil {
-		return interrupter.OnMutating(obj, oldObj)
+		return interrupter.OnMutating(obj, oldObj, operation)
 	}
 
 	return nil, nil
 }
 
-func (p *policyInterrupterImpl) OnValidating(obj, oldObj *unstructured.Unstructured) error {
+func (p *policyInterrupterImpl) OnValidating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) error {
 	if interrupter := p.getInterrupter(obj); interrupter != nil {
-		return interrupter.OnValidating(obj, oldObj)
+		return interrupter.OnValidating(obj, oldObj, operation)
 	}
 
 	return nil

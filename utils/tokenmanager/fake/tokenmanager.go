@@ -13,8 +13,8 @@ func (f *FakeTokenManager) AddToken(generator tokenmanager.TokenGenerator, callb
 	klog.V(4).InfoS("new token added", "id", generator.ID(), "callbackID", callback.ID())
 }
 
-func (f *FakeTokenManager) RemoveToken(tg tokenmanager.TokenGenerator, ic tokenmanager.IdentifiedCallback) error {
-	return nil
+func (f *FakeTokenManager) RemoveToken(tg tokenmanager.TokenGenerator, ic tokenmanager.IdentifiedCallback) {
+	return
 }
 
 func (f *FakeTokenManager) Stop() {
