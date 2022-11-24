@@ -139,7 +139,6 @@ func Test_tokenGeneratorImpl_Generate(t *testing.T) {
 
 func Test_tokenGeneratorImpl_ID(t *testing.T) {
 	type fields struct {
-		id                    string
 		authUrl               string
 		username              string
 		password              string

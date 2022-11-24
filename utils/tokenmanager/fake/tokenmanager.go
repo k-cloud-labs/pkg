@@ -14,7 +14,6 @@ func (f *FakeTokenManager) AddToken(generator tokenmanager.TokenGenerator, callb
 }
 
 func (f *FakeTokenManager) RemoveToken(tg tokenmanager.TokenGenerator, ic tokenmanager.IdentifiedCallback) {
-	return
 }
 
 func (f *FakeTokenManager) Stop() {
