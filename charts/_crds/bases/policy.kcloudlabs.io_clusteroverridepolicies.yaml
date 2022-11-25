@@ -1348,6 +1348,9 @@ spec:
                                     method:
                                       description: Method as basic http method(e.g.
                                         GET or POST)
+                                      enum:
+                                      - GET
+                                      - POST
                                       type: string
                                     params:
                                       additionalProperties:

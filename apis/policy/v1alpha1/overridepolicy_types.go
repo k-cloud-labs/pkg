@@ -214,6 +214,7 @@ type HttpDataRef struct {
 	URL string `json:"url,omitempty"`
 	// Method as basic http method(e.g. GET or POST)
 	// +required
+	// +kubebuilder:validation:Enum=GET;POST
 	Method string `json:"method,omitempty"`
 	// Header represents the custom header added to http request header.
 	// +optional

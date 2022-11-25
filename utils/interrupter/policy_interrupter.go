@@ -1,13 +1,16 @@
 package interrupter
 
 import (
+	"encoding/json"
 	"strings"
 	"sync"
 
+	jsonpatch "github.com/evanphx/json-patch"
 	jsonpatchv2 "gomodules.xyz/jsonpatch/v2"
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/klog/v2"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 )
@@ -36,11 +39,25 @@ type policyInterrupterImpl struct {
 }
 
 func (p *policyInterrupterImpl) OnMutating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) ([]jsonpatchv2.JsonPatchOperation, error) {
-	if interrupter := p.getInterrupter(obj); interrupter != nil {
-		return interrupter.OnMutating(obj, oldObj, operation)
+	interrupter := p.getInterrupter(obj)
+	if interrupter == nil {
+		return nil, nil
 	}
 
-	return nil, nil
+	patches, err := interrupter.OnMutating(obj, oldObj, operation)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(patches) > 0 {
+		if err = applyJSONPatch(obj, patches); err != nil {
+			klog.ErrorS(err, "apply json patch error",
+				"kind", obj.GetKind(), "namespace", obj.GetNamespace(), "name", obj.GetName())
+			return nil, err
+		}
+	}
+
+	return patches, nil
 }
 
 func (p *policyInterrupterImpl) OnValidating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) error {
@@ -58,11 +75,13 @@ func (p *policyInterrupterImpl) isKnownPolicy(obj *unstructured.Unstructured) bo
 
 func (p *policyInterrupterImpl) getInterrupter(obj *unstructured.Unstructured) PolicyInterrupter {
 	if !p.isKnownPolicy(obj) {
+		klog.V(5).InfoS("unknown policy", "gvk", obj.GroupVersionKind())
 		return nil
 	}
 
 	i, ok := p.interrupters.Load(obj.GroupVersionKind())
 	if ok {
+		klog.V(4).InfoS("sub interrupter found", "gvk", obj.GroupVersionKind())
 		return i.(PolicyInterrupter)
 	}
 
@@ -77,4 +96,29 @@ func NewPolicyInterrupterManager() PolicyInterrupterManager {
 	return &policyInterrupterImpl{
 		interrupters: sync.Map{},
 	}
+}
+
+func applyJSONPatch(obj *unstructured.Unstructured, overrides []jsonpatchv2.JsonPatchOperation) error {
+	jsonPatchBytes, err := json.Marshal(overrides)
+	if err != nil {
+		return err
+	}
+
+	patch, err := jsonpatch.DecodePatch(jsonPatchBytes)
+	if err != nil {
+		return err
+	}
+
+	objectJSONBytes, err := obj.MarshalJSON()
+	if err != nil {
+		return err
+	}
+
+	patchedObjectJSONBytes, err := patch.Apply(objectJSONBytes)
+	if err != nil {
+		return err
+	}
+
+	err = obj.UnmarshalJSON(patchedObjectJSONBytes)
+	return err
 }

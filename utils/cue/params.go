@@ -2,6 +2,7 @@ package cue
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -177,13 +178,21 @@ func getObject(c dynamiclister.DynamicResourceLister, obj *unstructured.Unstruct
 	}
 
 	if rs.Name != "" {
-		refName, err := parseAndGetRefValue(rs.Name, obj)
+		refName, ok, err := parseAndGetRefValue(rs.Name, obj)
 		if err != nil {
 			return nil, err
 		}
-		refNs, err := parseAndGetRefValue(rs.Namespace, obj)
+		if !ok {
+			// ref not found return an empty obj
+			return new(unstructured.Unstructured), nil
+		}
+		refNs, ok, err := parseAndGetRefValue(rs.Namespace, obj)
 		if err != nil {
 			return nil, err
+		}
+		if !ok {
+			// ref not found return an empty obj
+			return new(unstructured.Unstructured), nil
 		}
 
 		klog.V(4).InfoS("get owner reference", "apiVersion", rs.APIVersion, "kind", rs.Kind, "name", refName)
@@ -196,9 +205,13 @@ func getObject(c dynamiclister.DynamicResourceLister, obj *unstructured.Unstruct
 	}
 
 	if rs.LabelSelector != nil {
-		handled, err := handleRefSelectLabels(rs.LabelSelector, obj)
+		handled, ok, err := handleRefSelectLabels(rs.LabelSelector, obj)
 		if err != nil {
 			return nil, err
+		}
+		if !ok {
+			// ref not found
+			return new(unstructured.Unstructured), nil
 		}
 		// use selector
 		s, err := metav1.LabelSelectorAsSelector(handled)
@@ -221,15 +234,19 @@ func getObject(c dynamiclister.DynamicResourceLister, obj *unstructured.Unstruct
 	return nil, nil
 }
 
-func handleRefSelectLabels(ls *metav1.LabelSelector, obj *unstructured.Unstructured) (*metav1.LabelSelector, error) {
+func handleRefSelectLabels(ls *metav1.LabelSelector, obj *unstructured.Unstructured) (*metav1.LabelSelector, bool, error) {
 	result := &metav1.LabelSelector{
 		MatchLabels:      make(map[string]string),
 		MatchExpressions: make([]metav1.LabelSelectorRequirement, len(ls.MatchExpressions)),
 	}
 	for k, v := range ls.MatchLabels {
-		refVal, err := parseAndGetRefValue(v, obj)
+		refVal, ok, err := parseAndGetRefValue(v, obj)
 		if err != nil {
-			return nil, err
+			return nil, false, err
+		}
+		if !ok {
+			// ref not found
+			return nil, false, nil
 		}
 
 		result.MatchLabels[k] = refVal
@@ -238,9 +255,13 @@ func handleRefSelectLabels(ls *metav1.LabelSelector, obj *unstructured.Unstructu
 	for i, expression := range ls.MatchExpressions {
 		var values []string
 		for _, value := range expression.Values {
-			refVal, err := parseAndGetRefValue(value, obj)
+			refVal, ok, err := parseAndGetRefValue(value, obj)
 			if err != nil {
-				return nil, err
+				return nil, false, err
+			}
+			if !ok {
+				// ref not found
+				return nil, false, nil
 			}
 
 			values = append(values, refVal)
@@ -253,7 +274,7 @@ func handleRefSelectLabels(ls *metav1.LabelSelector, obj *unstructured.Unstructu
 		}
 	}
 
-	return result, nil
+	return result, true, nil
 }
 
 func getOwnerReference(c dynamiclister.DynamicResourceLister, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
@@ -272,7 +293,17 @@ func getOwnerReference(c dynamiclister.DynamicResourceLister, obj *unstructured.
 		return nil, err
 	}
 
-	result, err := lister.ByNamespace(obj.GetNamespace()).Get(or.Name)
+	ns := obj.GetNamespace()
+	if ns == "" {
+		ns = "default"
+	}
+
+	if or.Name == "" {
+		// return empty obj
+		return new(unstructured.Unstructured), nil
+	}
+
+	result, err := lister.ByNamespace(ns).Get(or.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -313,31 +344,39 @@ func getHttpResponse(c *http.Client, obj *unstructured.Unstructured, ref *policy
 	}
 
 	var (
-		params string
-		query  = url.Values{}
-		body   io.Reader
+		params  string
+		query   = url.Values{}
+		reqBody io.Reader
 	)
 	for k, v := range ref.Params {
-		refVal, err := parseAndGetRefValue(v, obj)
+		refVal, ok, err := parseAndGetRefValue(v, obj)
 		if err != nil {
 			return nil, err
+		}
+		if !ok {
+			// ref not found
+			return map[string]any{}, nil
 		}
 		query.Set(k, refVal)
 	}
 
 	if len(ref.Body.Raw) > 0 {
-		body = bytes.NewBuffer(ref.Body.Raw)
+		reqBody = bytes.NewBuffer(ref.Body.Raw)
 	}
 
 	if len(ref.Params) > 0 {
 		params = "?" + query.Encode()
 	}
 
-	refUrl, err := parseAndGetRefValue(ref.URL, obj)
+	refUrl, ok, err := parseAndGetRefValue(ref.URL, obj)
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest(ref.Method, refUrl+params, body)
+	if !ok {
+		// ref not found
+		return map[string]any{}, nil
+	}
+	req, err := http.NewRequest(strings.ToUpper(ref.Method), refUrl+params, reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -349,25 +388,36 @@ func getHttpResponse(c *http.Client, obj *unstructured.Unstructured, ref *policy
 	if ref.Auth != nil {
 		token, err := httpAuth(ref.Auth)
 		if err != nil {
+			klog.ErrorS(err, "auth http failed", "url", refUrl, "method", ref.Method)
 			return nil, err
 		}
 
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
+	klog.V(4).InfoS("requesting http api", "url", refUrl, "method", ref.Method)
 	resp, err := c.Do(req)
 	if err != nil {
+		klog.ErrorS(err, "request http api failed", "url", refUrl, "method", ref.Method)
 		return nil, err
 	}
 	defer noErr(resp.Body.Close)
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
+		klog.ErrorS(err, "read http body failed", "url", refUrl, "method", ref.Method)
+		return nil, err
+	}
+	klog.V(4).InfoS("http response", "url", refUrl, "method", ref.Method, "body", string(b))
+
+	respBody := make(map[string]any)
+	if err = json.Unmarshal(b, &respBody); err != nil {
+		klog.ErrorS(err, "unmarshal response body to map[string]any failed")
 		return nil, err
 	}
 
 	return map[string]any{
-		"body":    string(b),
+		"body":    respBody,
 		"header":  resp.Header,
 		"trailer": resp.Trailer,
 	}, nil
@@ -411,22 +461,23 @@ func matchRefValue(s string) string {
 	return ""
 }
 
-func parseAndGetRefValue(refKey string, obj *unstructured.Unstructured) (string, error) {
+func parseAndGetRefValue(refKey string, obj *unstructured.Unstructured) (string, bool, error) {
 	key := matchRefValue(refKey)
 	if key == "" {
-		return refKey, nil
+		return refKey, true, nil
 	}
 
 	v, ok, err := unstructured.NestedString(obj.Object, strings.Split(key, ".")...)
 	if err != nil {
 		klog.ErrorS(err, "get reference value from current object got error", "key", key, "object", klog.KObj(obj))
-		return "", fmt.Errorf("get reference value from current object got error,err=%w", err)
+		return "", false, fmt.Errorf("get reference value from current object got error,err=%w", err)
 	}
 
+	// ref not found
 	if !ok {
 		klog.ErrorS(err, "get reference value from current object is not string", "key", key, "object", klog.KObj(obj))
-		return "", errors.New("get reference value from current object is not string")
+		return "", false, nil
 	}
 
-	return strings.Replace(refKey, fmt.Sprintf("{{%s}}", key), v, 1), nil
+	return strings.Replace(refKey, fmt.Sprintf("{{%s}}", key), v, 1), true, nil
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	admissionv1 "k8s.io/api/admission/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -197,6 +198,96 @@ if data.object.name == "cue" {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("executeCueV2() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_getPodPhase(t *testing.T) {
+	type args struct {
+		obj *unstructured.Unstructured
+	}
+	tests := []struct {
+		name string
+		args args
+		want corev1.PodPhase
+	}{
+		{
+			name: "1",
+			args: args{
+				obj: nil,
+			},
+			want: "",
+		},
+		{
+			name: "2",
+			args: args{
+				obj: &unstructured.Unstructured{
+					Object: map[string]any{
+						"kind": "Deployment",
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "3",
+			args: args{
+				obj: &unstructured.Unstructured{
+					Object: map[string]any{
+						"kind": "Pod",
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "4",
+			args: args{
+				obj: &unstructured.Unstructured{
+					Object: map[string]any{
+						"kind": "Pod",
+						"status": map[string]any{
+							"abc": "abc",
+						},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "5",
+			args: args{
+				obj: &unstructured.Unstructured{
+					Object: map[string]any{
+						"kind": "Pod",
+						"status": map[string]any{
+							"phase": "Pending",
+						},
+					},
+				},
+			},
+			want: corev1.PodPending,
+		},
+		{
+			name: "6",
+			args: args{
+				obj: &unstructured.Unstructured{
+					Object: map[string]any{
+						"kind": "Pod",
+						"status": map[string]any{
+							"phase": "Running",
+						},
+					},
+				},
+			},
+			want: corev1.PodRunning,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getPodPhase(tt.args.obj); got != tt.want {
+				t.Errorf("getPodPhase() = %v, want %v", got, tt.want)
 			}
 		})
 	}
