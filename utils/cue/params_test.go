@@ -94,6 +94,16 @@ func Test_parseAndGetRefValue(t *testing.T) {
 			wantErr:  false,
 			wantBool: false,
 		},
+		{
+			name: "error3",
+			args: args{
+				refKey: "{{spec.replica}}",
+				keys:   []string{"spec", "replica"},
+				value:  int64(1),
+			},
+			wantErr:  true,
+			wantBool: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -194,6 +204,23 @@ func Test_handleRefSelectLabels(t *testing.T) {
 			wantErr:  false,
 			wantBool: false,
 		},
+		{
+			name: "error",
+			args: args{
+				ls: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "name",
+							Operator: metav1.LabelSelectorOpIn,
+							Values:   []string{"{{metadata.name2}}"},
+						},
+					},
+				},
+				obj: newBasicObj("name", "ns"),
+			},
+			wantErr:  false,
+			wantBool: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -246,7 +273,7 @@ func Test_getHttpResponse(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "auth",
+			name: "auth1",
 			args: args{
 				obj: newBasicObj("name", "ns"),
 				ref: &policyv1alpha1.HttpDataRef{
@@ -262,6 +289,26 @@ func Test_getHttpResponse(t *testing.T) {
 				// data get from request header authorization
 				"body": map[string]any{
 					"token": "Bearer static",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "auth2",
+			args: args{
+				obj: newBasicObj("name", "ns"),
+				ref: &policyv1alpha1.HttpDataRef{
+					URL:    "http://127.0.0.1:8090/api/v1/token",
+					Method: "GET",
+					Auth: &policyv1alpha1.HttpRequestAuth{
+						Token: "dynamic",
+					},
+				},
+			},
+			want: map[string]any{
+				// data get from request header authorization
+				"body": map[string]any{
+					"token": "Bearer dynamic",
 				},
 			},
 			wantErr: false,
