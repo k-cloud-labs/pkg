@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
@@ -196,7 +197,7 @@ func getObject(c dynamiclister.DynamicResourceLister, obj *unstructured.Unstruct
 		}
 
 		klog.V(4).InfoS("get owner reference", "apiVersion", rs.APIVersion, "kind", rs.Kind, "name", refName)
-		obj, err := lister.ByNamespace(refNs).Get(refName)
+		obj, err := convertLister(lister, refNs).Get(refName)
 		if err != nil {
 			return nil, err
 		}
@@ -218,9 +219,18 @@ func getObject(c dynamiclister.DynamicResourceLister, obj *unstructured.Unstruct
 		if err != nil {
 			return nil, err
 		}
+		// ns
+		refNs, ok, err := parseAndGetRefValue(rs.Namespace, obj)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			// ref not found return an empty obj
+			return new(unstructured.Unstructured), nil
+		}
 
 		klog.V(4).InfoS("get object", "label", s.String())
-		list, err := lister.ByNamespace(rs.Namespace).List(s)
+		list, err := convertLister(lister, refNs).List(s)
 		if err != nil {
 			return nil, err
 		}
@@ -293,22 +303,25 @@ func getOwnerReference(c dynamiclister.DynamicResourceLister, obj *unstructured.
 		return nil, err
 	}
 
-	ns := obj.GetNamespace()
-	if ns == "" {
-		ns = "default"
-	}
-
 	if or.Name == "" {
 		// return empty obj
 		return new(unstructured.Unstructured), nil
 	}
 
-	result, err := lister.ByNamespace(ns).Get(or.Name)
+	result, err := convertLister(lister, obj.GetNamespace()).Get(or.Name)
 	if err != nil {
 		return nil, err
 	}
 
 	return result.(*unstructured.Unstructured), nil
+}
+
+func convertLister(l cache.GenericLister, ns string) cache.GenericNamespaceLister {
+	if ns != "" {
+		return l.ByNamespace(ns)
+	}
+
+	return l.(cache.GenericNamespaceLister)
 }
 
 // See shouldCopyHeaderOnRedirect https://golang.org/src/net/http/client.go
@@ -462,6 +475,10 @@ func matchRefValue(s string) string {
 }
 
 func parseAndGetRefValue(refKey string, obj *unstructured.Unstructured) (string, bool, error) {
+	if strings.Contains(refKey, "{{}}") {
+		return "", false, errors.New("invalid ref key")
+	}
+
 	key := matchRefValue(refKey)
 	if key == "" {
 		return refKey, true, nil

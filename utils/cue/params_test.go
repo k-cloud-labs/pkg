@@ -104,6 +104,16 @@ func Test_parseAndGetRefValue(t *testing.T) {
 			wantErr:  true,
 			wantBool: false,
 		},
+		{
+			name: "error4",
+			args: args{
+				refKey: "{{}}",
+				keys:   []string{"spec", "replica"},
+				value:  int64(1),
+			},
+			wantErr:  true,
+			wantBool: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
