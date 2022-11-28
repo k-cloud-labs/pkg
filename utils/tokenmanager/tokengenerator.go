@@ -89,7 +89,7 @@ func (tg *tokenGeneratorImpl) Generate(ctx context.Context) (token string, expir
 	}
 
 	if t.ExpireAt > 0 {
-		expireAt = time.Unix(t.ExpireAt, 0)
+		expireAt = time.Unix(t.ExpireAt/1000, 0)
 		return t.Token, expireAt, nil
 	}
 
