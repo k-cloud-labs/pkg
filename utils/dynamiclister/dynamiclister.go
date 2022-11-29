@@ -20,6 +20,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/k-cloud-labs/pkg/utils/informermanager"
+	"github.com/k-cloud-labs/pkg/utils/metrics"
 )
 
 // DynamicResourceLister define a cached dynamic resource lister
@@ -118,6 +119,7 @@ func (d *dynamicResourceListerImpl) GVKToResourceLister(gvk schema.GroupVersionK
 	// add to cache
 	go func() {
 		if err := d.RegisterNewResource(true, gvk); err != nil {
+			metrics.SyncResourceError(gvk)
 			klog.ErrorS(err, "RegisterNewResource got error", "gvk", gvk.String())
 		}
 	}()

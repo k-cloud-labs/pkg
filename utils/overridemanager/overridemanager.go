@@ -17,6 +17,7 @@ import (
 	"github.com/k-cloud-labs/pkg/utils"
 	"github.com/k-cloud-labs/pkg/utils/cue"
 	"github.com/k-cloud-labs/pkg/utils/dynamiclister"
+	"github.com/k-cloud-labs/pkg/utils/metrics"
 	"github.com/k-cloud-labs/pkg/utils/util"
 )
 
@@ -118,7 +119,8 @@ func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj, oldObj *unstr
 
 	appliedOverrides := &AppliedOverrides{}
 	for _, p := range matchingPolicyOverriders {
-		if err := o.applyPolicyOverriders(rawObj, oldObj, p.overriders); err != nil {
+		metrics.OverridePolicyMatched(p.name, rawObj.GroupVersionKind())
+		if err := o.applyPolicyOverriders(rawObj, oldObj, p); err != nil {
 			klog.ErrorS(err, "Failed to apply cluster overriders.", "clusteroverridepolicy", p.name, "resource", klog.KObj(rawObj), "operation", operation)
 			return nil, err
 		}
@@ -154,7 +156,8 @@ func (o *overrideManagerImpl) applyOverridePolicies(rawObj, oldObj *unstructured
 
 	appliedOverriders := &AppliedOverrides{}
 	for _, p := range matchingPolicyOverriders {
-		if err := o.applyPolicyOverriders(rawObj, oldObj, p.overriders); err != nil {
+		metrics.OverridePolicyMatched(p.namespace+"/"+p.name, rawObj.GroupVersionKind())
+		if err := o.applyPolicyOverriders(rawObj, oldObj, p); err != nil {
 			klog.ErrorS(err, "Failed to apply overriders.",
 				"overridepolicy", fmt.Sprintf("%s/%s", p.namespace, p.name), "resource", klog.KObj(rawObj), "operation", operation)
 			return nil, fmt.Errorf("appling policy(%v/%v) err=%v", p.namespace, p.name, err)
@@ -202,44 +205,62 @@ func (o *overrideManagerImpl) getOverridersFromOverridePolicies(policies []Gener
 }
 
 // applyPolicyOverriders applies OverridePolicy/ClusterOverridePolicy overriders to target object
-func (o *overrideManagerImpl) applyPolicyOverriders(rawObj, oldObj *unstructured.Unstructured, overriders policyv1alpha1.Overriders) error {
-	if overriders.Template != nil && overriders.RenderedCue != "" {
-		p, err := cue.BuildCueParamsViaOverridePolicy(o.dynamicLister, rawObj, overriders.Template)
+func (o *overrideManagerImpl) applyPolicyOverriders(rawObj, oldObj *unstructured.Unstructured, p policyOverriders) error {
+	policyName := p.name
+	if p.namespace != "" {
+		policyName = p.namespace + "/" + p.name
+	}
+	if p.overriders.Template != nil && p.overriders.RenderedCue != "" {
+		cp, err := cue.BuildCueParamsViaOverridePolicy(o.dynamicLister, rawObj, p.overriders.Template)
 		if err != nil {
+			metrics.PolicyGotError(policyName, rawObj.GroupVersionKind(), metrics.ErrTypePrepareCueParams)
 			return fmt.Errorf("BuildCueParamsViaOverridePolicy error=%w", err)
 		}
-		p.Object = rawObj
-		p.OldObject = oldObj
-		if p.OldObject == nil {
-			p.OldObject = &unstructured.Unstructured{Object: map[string]interface{}{}}
+		cp.Object = rawObj
+		cp.OldObject = oldObj
+		if cp.OldObject == nil {
+			cp.OldObject = &unstructured.Unstructured{Object: map[string]interface{}{}}
 		}
 		params := []cue.Parameter{
 			{
-				Object: p,
+				Object: cp,
 				Name:   utils.DataParameterName,
 			},
 		}
 
-		patches, err := executeCueV2(overriders.RenderedCue, params)
+		patches, err := executeCueV2(p.overriders.RenderedCue, params)
 		if err != nil {
+			metrics.PolicyGotError(policyName, rawObj.GroupVersionKind(), metrics.ErrorTypeCueExecute)
 			return err
+		}
+
+		if len(patches) > 0 {
+			metrics.OverridePolicyOverride(policyName, rawObj.GroupVersionKind())
 		}
 
 		if err := applyJSONPatch(rawObj, patches); err != nil {
 			return err
 		}
 	}
-	if overriders.Cue != "" {
-		patches, err := executeCue(rawObj, overriders.Cue)
+	if p.overriders.Cue != "" {
+		patches, err := executeCue(rawObj, p.overriders.Cue)
 		if err != nil {
+			metrics.PolicyGotError(policyName, rawObj.GroupVersionKind(), metrics.ErrorTypeCueExecute)
 			return err
+		}
+		if patches != nil && len(*patches) > 0 {
+			metrics.OverridePolicyOverride(policyName, rawObj.GroupVersionKind())
 		}
 		if err := applyJSONPatch(rawObj, *patches); err != nil {
 			return err
 		}
 	}
 
-	return applyJSONPatch(rawObj, parseJSONPatchesByPlaintext(overriders.Plaintext))
+	if len(p.overriders.Plaintext) > 0 {
+		metrics.OverridePolicyOverride(policyName, rawObj.GroupVersionKind())
+	}
+
+	return applyJSONPatch(rawObj, parseJSONPatchesByPlaintext(p.overriders.Plaintext))
 }
 
 // applyJSONPatch applies the override on to the given unstructured object.
