@@ -1,7 +1,12 @@
 package validatemanager
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+
 	admissionv1 "k8s.io/api/admission/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog/v2"
@@ -76,6 +81,8 @@ func (m *validateManagerImpl) applyValidatePolicy(cvp *policyv1alpha1.ClusterVal
 		return &ValidateResult{Valid: true}, nil
 	}
 
+	klog.V(4).InfoS("resource matched a validate policy", "operation", operation, "policy", cvp.GroupVersionKind(),
+		"resource", fmt.Sprintf("%v/%v/%v", rawObj.GroupVersionKind(), rawObj.GetNamespace(), rawObj.GetName()))
 	for _, rule := range cvp.Spec.ValidateRules {
 		if len(rule.TargetOperations) > 0 && !util.Exists(rule.TargetOperations, operation) {
 			// no matched
@@ -85,23 +92,25 @@ func (m *validateManagerImpl) applyValidatePolicy(cvp *policyv1alpha1.ClusterVal
 			oldObj = nil
 		}
 
-		if rule.RenderedCue != "" {
+		if rule.Template != nil && rule.RenderedCue != "" {
 			params := &cue.CueParams{
 				Object:    rawObj,
 				OldObject: oldObj,
 			}
 
-			result, err := m.executeRenderedCue(params, &rule, cvp.Name)
+			result, err := m.executeTemplate(params, &rule, cvp.Name)
 			if err != nil {
 				klog.ErrorS(err, "Failed to execute rendered cue.",
 					"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
 				return nil, err
 			}
 
-			klog.V(2).InfoS("Applied validate policy.",
-				"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
-			if !result.Valid {
-				return result, nil
+			if result != nil {
+				klog.V(2).InfoS("Applied validate policy.",
+					"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
+				if !result.Valid {
+					return result, nil
+				}
 			}
 		}
 
@@ -125,7 +134,16 @@ func (m *validateManagerImpl) applyValidatePolicy(cvp *policyv1alpha1.ClusterVal
 	}, nil
 }
 
-func (m *validateManagerImpl) executeRenderedCue(params *cue.CueParams, rule *policyv1alpha1.ValidateRuleWithOperation, cvpName string) (*ValidateResult, error) {
+func (m *validateManagerImpl) executeTemplate(params *cue.CueParams, rule *policyv1alpha1.ValidateRuleWithOperation, cvpName string) (*ValidateResult, error) {
+	if rule.Template.Type == policyv1alpha1.ValidateRuleTypePodAvailableBadge && rule.Template.PodAvailableBadge != nil {
+		// only calculate running pod
+		if phase := getPodPhase(params.Object); phase != corev1.PodRunning {
+			klog.V(4).InfoS("pod phase incorrect", "phase", phase,
+				"pod", params.Object.GetNamespace()+"/", params.Object.GetName())
+			return nil, nil
+		}
+	}
+
 	extraParams, err := cue.BuildCueParamsViaValidatePolicy(m.dynamicClient, params.Object, rule.Template)
 	if err != nil {
 		klog.ErrorS(err, "Failed to build validate policy params.",
@@ -133,6 +151,16 @@ func (m *validateManagerImpl) executeRenderedCue(params *cue.CueParams, rule *po
 		return nil, err
 	}
 
+	if klog.V(4).Enabled() {
+		buf := &bytes.Buffer{}
+		enc := json.NewEncoder(buf)
+		enc.SetIndent("", "\t")
+		if err := enc.Encode(extraParams); err != nil {
+			klog.ErrorS(err, "encode")
+		}
+		klog.V(4).InfoS("before execute", "params", buf.String(), "cue", rule.RenderedCue)
+
+	}
 	params.ExtraParams = extraParams.ExtraParams
 	result, err := executeCueV2(rule.RenderedCue, []cue.Parameter{
 		{
@@ -190,4 +218,26 @@ func executeCue(rawObj *unstructured.Unstructured, oldObj *unstructured.Unstruct
 
 	klog.InfoS("v1", "result", result)
 	return &result, nil
+}
+
+func getPodPhase(obj *unstructured.Unstructured) corev1.PodPhase {
+	if obj == nil {
+		return ""
+	}
+
+	if obj.GetKind() != "Pod" {
+		return ""
+	}
+
+	val, ok, err := unstructured.NestedString(obj.Object, "status", "phase")
+	if err != nil {
+		klog.ErrorS(err, "load pod phase failed", "name", obj.GetNamespace()+"/"+obj.GetName())
+		return ""
+	}
+
+	if !ok {
+		return ""
+	}
+
+	return corev1.PodPhase(val)
 }

@@ -5,221 +5,58 @@ import (
 	"testing"
 
 	jsonpatchv2 "gomodules.xyz/jsonpatch/v2"
+	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
-	"github.com/k-cloud-labs/pkg/utils/templatemanager"
-	"github.com/k-cloud-labs/pkg/utils/templatemanager/templates"
+	fakedtokenmanager "github.com/k-cloud-labs/pkg/utils/tokenmanager/fake"
 )
 
-func Test_policyInterrupterImpl_renderAndFormat(t *testing.T) {
-	mtm, err := templatemanager.NewOverrideTemplateManager(&templatemanager.TemplateSource{
-		Content:      templates.OverrideTemplate,
-		TemplateName: "BaseTemplate",
-	})
+func test_fakePolicyInterrupterManager() (PolicyInterrupterManager, error) {
+	// base
+	baseInterrupter, err := test_baseInterrupter()
 	if err != nil {
-		t.Error(err)
-		return
+		return nil, err
 	}
 
-	vtm, err := templatemanager.NewValidateTemplateManager(&templatemanager.TemplateSource{
-		Content:      templates.ValidateTemplate,
-		TemplateName: "BaseTemplate",
-	})
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	policyInterrupterManager := NewPolicyInterrupterManager()
+	tokenManager := fakedtokenmanager.NewFakeTokenGenerator()
 
-	intPtr := func(i int64) *int64 {
-		return &i
-	}
+	// op
+	overridePolicyInterrupter := NewOverridePolicyInterrupter(baseInterrupter, tokenManager, nil, nil)
+	policyInterrupterManager.AddInterrupter(schema.GroupVersionKind{
+		Group:   policyv1alpha1.SchemeGroupVersion.Group,
+		Version: policyv1alpha1.SchemeGroupVersion.Version,
+		Kind:    "OverridePolicy",
+	}, overridePolicyInterrupter)
+	// cop
+	policyInterrupterManager.AddInterrupter(schema.GroupVersionKind{
+		Group:   policyv1alpha1.SchemeGroupVersion.Group,
+		Version: policyv1alpha1.SchemeGroupVersion.Version,
+		Kind:    "ClusterOverridePolicy",
+	}, NewClusterOverridePolicyInterrupter(overridePolicyInterrupter, nil))
+	// cvp
+	policyInterrupterManager.AddInterrupter(schema.GroupVersionKind{
+		Group:   policyv1alpha1.SchemeGroupVersion.Group,
+		Version: policyv1alpha1.SchemeGroupVersion.Version,
+		Kind:    "ClusterValidatePolicy",
+	}, NewClusterValidatePolicyInterrupter(baseInterrupter, tokenManager, nil, nil))
 
-	policyInterrupter := &policyInterrupterImpl{
-		overrideTemplateManager: mtm,
-		validateTemplateManager: vtm,
-		cueManager:              templatemanager.NewCueManager(),
-	}
-	type args struct {
-		data any
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		{
-			name: "validatePolicy",
-			args: args{
-				data: &policyv1alpha1.ValidateRuleTemplate{
-					Type: policyv1alpha1.ValidateRuleTypeCondition,
-					Condition: &policyv1alpha1.ValidateCondition{
-						AffectMode: policyv1alpha1.AffectModeReject,
-						Cond:       policyv1alpha1.CondLesser,
-						DataRef: &policyv1alpha1.ResourceRefer{
-							From: policyv1alpha1.FromCurrentObject,
-							Path: "/spec/replica",
-						},
-						Message: "no deletion",
-						Value: &policyv1alpha1.ConstantValue{
-							Integer: intPtr(100),
-						},
-						ValueProcess: &policyv1alpha1.ValueProcess{
-							Operation: policyv1alpha1.OperationTypeMultiply,
-							OperationWith: &intstr.IntOrString{
-								Type:   intstr.String,
-								StrVal: "60%",
-							},
-						},
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "validatePAB",
-			args: args{
-				data: &policyv1alpha1.ValidateRuleTemplate{
-					Type: policyv1alpha1.ValidateRuleTypePodAvailableBadge,
-					PodAvailableBadge: &policyv1alpha1.PodAvailableBadge{
-						MaxUnavailable: &intstr.IntOrString{
-							Type:   intstr.String,
-							StrVal: "60%",
-						},
-						ReplicaReference: &policyv1alpha1.ReplicaResourceRefer{
-							From:               policyv1alpha1.FromOwnerReference,
-							TargetReplicaPath:  "/spec/replica",
-							CurrentReplicaPath: "/status/replica",
-						},
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "overridePolicy",
-			args: args{
-				data: &policyv1alpha1.OverrideRuleTemplate{
-					Type:      policyv1alpha1.OverrideRuleTypeAnnotations,
-					Operation: policyv1alpha1.OverriderOpReplace,
-					Value: &policyv1alpha1.ConstantValue{
-						StringMap: map[string]string{
-							"app":       "cue",
-							"no-delete": "True",
-						},
-					},
-				},
-			},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-
-			gotB, err := policyInterrupter.renderAndFormat(tt.args.data)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("renderAndFormat() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			t.Logf("cue >>>\n%v", string(gotB))
-		})
-	}
-}
-
-func Test_convertToPolicy(t *testing.T) {
-	type args struct {
-		u    *unstructured.Unstructured
-		data any
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		{
-			name: "1",
-			args: args{
-				u: &unstructured.Unstructured{Object: map[string]interface{}{
-					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
-					"kind":       "OverridePolicy",
-				}},
-				data: &policyv1alpha1.OverridePolicy{},
-			},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := convertToPolicy(tt.args.u, tt.args.data); (err != nil) != tt.wantErr {
-				t.Errorf("convertToPolicy() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func Test_applyJSONPatch(t *testing.T) {
-	type args struct {
-		obj       *unstructured.Unstructured
-		overrides []jsonpatchv2.JsonPatchOperation
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		{
-			name: "1",
-			args: args{
-				obj: &unstructured.Unstructured{Object: map[string]interface{}{
-					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
-					"kind":       "OverridePolicy",
-				}},
-				overrides: []jsonpatchv2.JsonPatchOperation{
-					{
-						Operation: "add",
-						Path:      "/kind",
-						Value:     "ClusterOverridePolicy",
-					},
-				},
-			},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := applyJSONPatch(tt.args.obj, tt.args.overrides); (err != nil) != tt.wantErr {
-				t.Errorf("applyJSONPatch() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
+	return policyInterrupterManager, nil
 }
 
 func Test_policyInterrupterImpl_OnValidating(t *testing.T) {
-	mtm, err := templatemanager.NewOverrideTemplateManager(&templatemanager.TemplateSource{
-		Content:      templates.OverrideTemplate,
-		TemplateName: "BaseTemplate",
-	})
+	policyInterrupter, err := test_fakePolicyInterrupterManager()
 	if err != nil {
 		t.Error(err)
 		return
 	}
-
-	vtm, err := templatemanager.NewValidateTemplateManager(&templatemanager.TemplateSource{
-		Content:      templates.ValidateTemplate,
-		TemplateName: "BaseTemplate",
-	})
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	policyInterrupter := NewPolicyInterrupter(mtm, vtm, templatemanager.NewCueManager())
 
 	type args struct {
-		obj    *unstructured.Unstructured
-		oldObj *unstructured.Unstructured
+		obj       *unstructured.Unstructured
+		oldObj    *unstructured.Unstructured
+		operation admissionv1.Operation
 	}
 	tests := []struct {
 		name    string
@@ -229,13 +66,69 @@ func Test_policyInterrupterImpl_OnValidating(t *testing.T) {
 		{
 			name: "1",
 			args: args{
-				obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				operation: admissionv1.Update,
+				oldObj: &unstructured.Unstructured{Object: map[string]any{
 					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
 					"kind":       "OverridePolicy",
-					"spec": map[string]interface{}{
-						"overrideRules": []map[string]interface{}{
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
 							{
-								"overriders": map[string]interface{}{
+								"overriders": map[string]any{},
+							},
+						},
+					},
+				}},
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "OverridePolicy",
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
+							{
+								"overriders": map[string]any{
+									"renderedCue": `
+ data:      _ @tag(data)
+object:    data.object
+oldObject: data.oldObject
+validate: {
+	if object.metadata.annotations."no-delete" != _|_ {
+		valid:  false
+		reason: "cannot delete this ns"
+	}
+	}
+}
+`,
+								},
+							},
+						},
+					},
+				}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "1.1",
+			args: args{
+				operation: admissionv1.Update,
+				oldObj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "OverridePolicy",
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
+							{
+								"overriders": map[string]any{
+									"renderedCue": ``,
+								},
+							},
+						},
+					},
+				}},
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "OverridePolicy",
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
+							{
+								"overriders": map[string]any{
 									"renderedCue": `
  data:      _ @tag(data)
 object:    data.object
@@ -258,13 +151,27 @@ validate: {
 		{
 			name: "2",
 			args: args{
-				obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				operation: admissionv1.Update,
+				oldObj: &unstructured.Unstructured{Object: map[string]any{
 					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
 					"kind":       "ClusterOverridePolicy",
-					"spec": map[string]interface{}{
-						"overrideRules": []map[string]interface{}{
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
 							{
-								"overriders": map[string]interface{}{
+								"overriders": map[string]any{
+									"renderedCue": ``,
+								},
+							},
+						},
+					},
+				}},
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterOverridePolicy",
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
+							{
+								"overriders": map[string]any{
 									"renderedCue": `
  data:      _ @tag(data)
 object:    data.object
@@ -285,13 +192,55 @@ validate: {
 			wantErr: false,
 		},
 		{
+			name: "2.1",
+			args: args{
+				operation: admissionv1.Create,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterOverridePolicy",
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
+							{
+								"overriders": map[string]any{
+									"renderedCue": `
+ data:      _ @tag(data)
+object:    data.object
+oldObject: data.oldObject
+validate: {
+	if object.metadata.annotations."no-delete" != _|_ {
+		valid:  false
+		reason: "cannot delete this ns"
+	} invalid cue here
+}
+`,
+								},
+							},
+						},
+					},
+				}},
+			},
+			wantErr: true,
+		},
+		{
 			name: "3",
 			args: args{
-				obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				operation: admissionv1.Update,
+				oldObj: &unstructured.Unstructured{Object: map[string]any{
 					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
 					"kind":       "ClusterValidatePolicy",
-					"spec": map[string]interface{}{
-						"validateRules": []map[string]interface{}{
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
+							{
+								"renderedCue": ``,
+							},
+						},
+					},
+				}},
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
 							{
 								"renderedCue": `
  data:      _ @tag(data)
@@ -311,10 +260,38 @@ validate: {
 			},
 			wantErr: false,
 		},
+		{
+			name: "3.1",
+			args: args{
+				operation: admissionv1.Create,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
+							{
+								"renderedCue": `
+ data:      _ @tag(data)
+object:    data.object
+oldObject: data.oldObject
+validate: {
+	if object.metadata.annotations."no-delete" != _|_ {
+		valid:  false
+		reason: "cannot delete this ns"
+	} invalid cue here
+}
+`,
+							},
+						},
+					},
+				}},
+			},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := policyInterrupter.OnValidating(tt.args.obj, tt.args.oldObj); (err != nil) != tt.wantErr {
+			if err := policyInterrupter.OnValidating(tt.args.obj, tt.args.oldObj, admissionv1.Create); (err != nil) != tt.wantErr {
 				t.Errorf("OnValidating() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -322,29 +299,16 @@ validate: {
 }
 
 func Test_policyInterrupterImpl_OnMutating(t *testing.T) {
-	mtm, err := templatemanager.NewOverrideTemplateManager(&templatemanager.TemplateSource{
-		Content:      templates.OverrideTemplate,
-		TemplateName: "BaseTemplate",
-	})
+	policyInterrupter, err := test_fakePolicyInterrupterManager()
 	if err != nil {
 		t.Error(err)
 		return
 	}
-
-	vtm, err := templatemanager.NewValidateTemplateManager(&templatemanager.TemplateSource{
-		Content:      templates.ValidateTemplate,
-		TemplateName: "BaseTemplate",
-	})
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	policyInterrupter := NewPolicyInterrupter(mtm, vtm, templatemanager.NewCueManager())
 
 	type args struct {
-		obj    *unstructured.Unstructured
-		oldObj *unstructured.Unstructured
+		obj       *unstructured.Unstructured
+		oldObj    *unstructured.Unstructured
+		operation admissionv1.Operation
 	}
 	tests := []struct {
 		name    string
@@ -355,18 +319,226 @@ func Test_policyInterrupterImpl_OnMutating(t *testing.T) {
 		{
 			name: "1",
 			args: args{
-				obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				operation: admissionv1.Create,
+				obj: &unstructured.Unstructured{Object: map[string]any{
 					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
 					"kind":       "OverridePolicy",
-					"spec": map[string]interface{}{
-						"overrideRules": []map[string]interface{}{
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
 							{
-								"overriders": map[string]interface{}{
-									"template": map[string]interface{}{
+								"overriders": map[string]any{
+									"template": map[string]any{
 										"type":      "annotations",
 										"operation": "replace",
 										"path":      "add-by",
-										"value": map[string]interface{}{
+										"value": map[string]any{
+											"string": "cue",
+										},
+									},
+								},
+							},
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"valueRef": map[string]any{
+											"from": "http",
+											"path": "body.name",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want: []jsonpatchv2.JsonPatchOperation{
+				{
+					Operation: "replace",
+					Path:      "/spec/overrideRules/0/overriders/renderedCue",
+					Value: `import (
+    "strings"
+    "strconv"
+    "math"
+    "list"
+)
+
+data:      _ @tag(data)
+object:    data.object
+kind:      object.kind
+oldObject: data.oldObject
+unFlattenPatches: [
+    if object.metadata.annotations == _|_ {
+        {
+            op:   "replace"
+            path: "/metadata/annotations"
+            value: {}
+        }
+    },
+    // annotations
+    {
+        op:    "replace"
+        path:  "/metadata/annotations/add-by"
+        value: "cue"
+    },
+]
+patches: list.FlattenN(unFlattenPatches, -1)
+`,
+				},
+				{
+					Operation: "replace",
+					Path:      "/spec/overrideRules/1/overriders/renderedCue",
+					Value: `import (
+    "strings"
+    "strconv"
+    "math"
+    "list"
+)
+
+data:      _ @tag(data)
+object:    data.object
+kind:      object.kind
+oldObject: data.oldObject
+http:      data.extraParams."http"
+unFlattenPatches: [
+    if object.metadata.annotations == _|_ {
+        {
+            op:   "replace"
+            path: "/metadata/annotations"
+            value: {}
+        }
+    },
+    // annotations
+    if http.body.name != _|_ {
+        {
+            op:    "replace"
+            path:  "/metadata/annotations/add-by"
+            value: http.body.name
+        }
+    },
+]
+patches: list.FlattenN(unFlattenPatches, -1)
+`,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "1.1",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "OverridePolicy",
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"value": map[string]any{
+											"string": "cue",
+										},
+									},
+								},
+							},
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"valueRef": map[string]any{
+											"from": "http",
+											"path": "body.name",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
+			name: "1.2",
+			args: args{
+				operation: admissionv1.Update,
+				oldObj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "OverridePolicy",
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"value": map[string]any{
+											"string": "cue",
+										},
+									},
+								},
+							},
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"valueRef": map[string]any{
+											"from": "http",
+											"path": "body.name",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "OverridePolicy",
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"value": map[string]any{
 											"string": "cue",
 										},
 									},
@@ -415,18 +587,226 @@ patches: list.FlattenN(unFlattenPatches, -1)
 		{
 			name: "2",
 			args: args{
-				obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				operation: admissionv1.Create,
+				obj: &unstructured.Unstructured{Object: map[string]any{
 					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
 					"kind":       "ClusterOverridePolicy",
-					"spec": map[string]interface{}{
-						"overrideRules": []map[string]interface{}{
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
 							{
-								"overriders": map[string]interface{}{
-									"template": map[string]interface{}{
+								"overriders": map[string]any{
+									"template": map[string]any{
 										"type":      "annotations",
 										"operation": "replace",
 										"path":      "add-by",
-										"value": map[string]interface{}{
+										"value": map[string]any{
+											"string": "cue",
+										},
+									},
+								},
+							},
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"valueRef": map[string]any{
+											"from": "http",
+											"path": "body.name",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want: []jsonpatchv2.JsonPatchOperation{
+				{
+					Operation: "replace",
+					Path:      "/spec/overrideRules/0/overriders/renderedCue",
+					Value: `import (
+    "strings"
+    "strconv"
+    "math"
+    "list"
+)
+
+data:      _ @tag(data)
+object:    data.object
+kind:      object.kind
+oldObject: data.oldObject
+unFlattenPatches: [
+    if object.metadata.annotations == _|_ {
+        {
+            op:   "replace"
+            path: "/metadata/annotations"
+            value: {}
+        }
+    },
+    // annotations
+    {
+        op:    "replace"
+        path:  "/metadata/annotations/add-by"
+        value: "cue"
+    },
+]
+patches: list.FlattenN(unFlattenPatches, -1)
+`,
+				},
+				{
+					Operation: "replace",
+					Path:      "/spec/overrideRules/1/overriders/renderedCue",
+					Value: `import (
+    "strings"
+    "strconv"
+    "math"
+    "list"
+)
+
+data:      _ @tag(data)
+object:    data.object
+kind:      object.kind
+oldObject: data.oldObject
+http:      data.extraParams."http"
+unFlattenPatches: [
+    if object.metadata.annotations == _|_ {
+        {
+            op:   "replace"
+            path: "/metadata/annotations"
+            value: {}
+        }
+    },
+    // annotations
+    if http.body.name != _|_ {
+        {
+            op:    "replace"
+            path:  "/metadata/annotations/add-by"
+            value: http.body.name
+        }
+    },
+]
+patches: list.FlattenN(unFlattenPatches, -1)
+`,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "2.1",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterOverridePolicy",
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"value": map[string]any{
+											"string": "cue",
+										},
+									},
+								},
+							},
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"valueRef": map[string]any{
+											"from": "http",
+											"path": "body.name",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
+			name: "2.2",
+			args: args{
+				operation: admissionv1.Update,
+				oldObj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterOverridePolicy",
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"value": map[string]any{
+											"string": "cue",
+										},
+									},
+								},
+							},
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"valueRef": map[string]any{
+											"from": "http",
+											"path": "body.name",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterOverridePolicy",
+					"spec": map[string]any{
+						"overrideRules": []map[string]any{
+							{
+								"overriders": map[string]any{
+									"template": map[string]any{
+										"type":      "annotations",
+										"operation": "replace",
+										"path":      "add-by",
+										"value": map[string]any{
 											"string": "cue",
 										},
 									},
@@ -475,22 +855,257 @@ patches: list.FlattenN(unFlattenPatches, -1)
 		{
 			name: "3",
 			args: args{
-				obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				operation: admissionv1.Create,
+				obj: &unstructured.Unstructured{Object: map[string]any{
 					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
 					"kind":       "ClusterValidatePolicy",
-					"spec": map[string]interface{}{
-						"validateRules": []map[string]interface{}{
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
 							{
-								"template": map[string]interface{}{
+								"template": map[string]any{
 									"type": "condition",
-									"condition": map[string]interface{}{
+									"condition": map[string]any{
 										"message": "forbidden",
 										"cond":    "Gte",
-										"dataRef": map[string]interface{}{
+										"dataRef": map[string]any{
 											"from": "current",
 											"path": "/spec/replica",
 										},
-										"value": map[string]interface{}{
+										"value": map[string]any{
+											"integer": 1,
+										},
+									},
+								},
+							},
+							{
+								"template": map[string]any{
+									"type": "condition",
+									"condition": map[string]any{
+										"message": "forbidden",
+										"cond":    "Equal",
+										"dataRef": map[string]any{
+											"from": "http",
+											"path": "body.origin",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+										"valueRef": map[string]any{
+											"from": "http",
+											"path": "body.target",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want: []jsonpatchv2.JsonPatchOperation{
+				{
+					Operation: "replace",
+					Path:      "/spec/validateRules/0/template/condition/affectMode",
+					Value:     "reject",
+				},
+				{
+					Operation: "replace",
+					Path:      "/spec/validateRules/0/renderedCue",
+					Value: `data:      _ @tag(data)
+object:    data.object
+oldObject: data.oldObject
+validate: {
+    if object.spec.replica != _|_ {
+        if object.spec.replica >= 1 {
+            valid:  false
+            reason: "forbidden"
+        }
+    }
+}
+`,
+				},
+				{
+					Operation: "replace",
+					Path:      "/spec/validateRules/1/template/condition/affectMode",
+					Value:     "reject",
+				},
+				{
+					Operation: "replace",
+					Path:      "/spec/validateRules/1/renderedCue",
+					Value: `data:      _ @tag(data)
+object:    data.object
+oldObject: data.oldObject
+http:      data.extraParams."http"
+http_d:    data.extraParams."http_d"
+validate: {
+    if http_d.body.origin != _|_ {
+        if http.body.target != _|_ {
+            if http_d.body.origin == http.body.target {
+                valid:  false
+                reason: "forbidden"
+            }
+        }
+    }
+}
+`,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "3.1",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
+							{
+								"template": map[string]any{
+									"type": "condition",
+									"condition": map[string]any{
+										"message": "forbidden",
+										"cond":    "Gte",
+										"dataRef": map[string]any{
+											"from": "current",
+											"path": "/spec/replica",
+										},
+										"value": map[string]any{
+											"integer": 1,
+										},
+									},
+								},
+							},
+							{
+								"template": map[string]any{
+									"type": "condition",
+									"condition": map[string]any{
+										"message": "forbidden",
+										"cond":    "Equal",
+										"dataRef": map[string]any{
+											"from": "http",
+											"path": "body.origin",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+										"valueRef": map[string]any{
+											"from": "http",
+											"path": "body.target",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
+			name: "3.2",
+			args: args{
+				operation: admissionv1.Update,
+				oldObj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
+							{
+								"template": map[string]any{
+									"type": "condition",
+									"condition": map[string]any{
+										"message": "forbidden",
+										"cond":    "Gte",
+										"dataRef": map[string]any{
+											"from": "current",
+											"path": "/spec/replica",
+										},
+										"value": map[string]any{
+											"integer": 1,
+										},
+									},
+								},
+							},
+							{
+								"template": map[string]any{
+									"type": "condition",
+									"condition": map[string]any{
+										"message": "forbidden",
+										"cond":    "Equal",
+										"dataRef": map[string]any{
+											"from": "http",
+											"path": "body.origin",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+										"valueRef": map[string]any{
+											"from": "http",
+											"path": "body.target",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
+							{
+								"template": map[string]any{
+									"type": "condition",
+									"condition": map[string]any{
+										"message": "forbidden",
+										"cond":    "Gte",
+										"dataRef": map[string]any{
+											"from": "current",
+											"path": "/spec/replica",
+										},
+										"value": map[string]any{
 											"integer": 1,
 										},
 									},
@@ -528,15 +1143,222 @@ validate: {
 		{
 			name: "4",
 			args: args{
-				obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				operation: admissionv1.Create,
+				obj: &unstructured.Unstructured{Object: map[string]any{
 					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
 					"kind":       "ClusterValidatePolicy",
-					"spec": map[string]interface{}{
-						"validateRules": []map[string]interface{}{
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
 							{
-								"template": map[string]interface{}{
+								"template": map[string]any{
 									"type": "pab",
-									"podAvailableBadge": map[string]interface{}{
+									"podAvailableBadge": map[string]any{
+										"maxUnavailable": "60%",
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want: []jsonpatchv2.JsonPatchOperation{
+				{
+					Operation: "replace",
+					Path:      "/spec/validateRules/0/template/podAvailableBadge/replicaReference",
+					Value: &policyv1alpha1.ReplicaResourceRefer{
+						From:               policyv1alpha1.FromOwnerReference,
+						TargetReplicaPath:  "/spec/replicas",
+						CurrentReplicaPath: "/status/replicas",
+					},
+				},
+				{
+					Operation: "replace",
+					Path:      "/spec/validateRules/0/renderedCue",
+					Value: `data:        _ @tag(data)
+object:      data.object
+oldObject:   data.oldObject
+otherObject: data.extraParams."otherObject"
+validate: {
+    if otherObject.spec.replicas != _|_ {
+        if otherObject.status.replicas != _|_ {
+            // target - target * 0.6 > current
+            if otherObject.spec.replicas-otherObject.spec.replicas*0.6 > otherObject.status.replicas-1 {
+                {
+                    valid:  false
+                    reason: "Cannot delete this pod, cause of hitting maxUnavailable(0.6)"
+                }
+            }
+        }
+    }
+}
+`,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "4.1",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
+							{
+								"template": map[string]any{
+									"type": "pab",
+									"podAvailableBadge": map[string]any{
+										"maxUnavailable": "60%",
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
+			name: "5",
+			args: args{
+				operation: admissionv1.Create,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
+							{
+								"template": map[string]any{
+									"type": "pab",
+									"podAvailableBadge": map[string]any{
+										"maxUnavailable": "60%",
+										"replicaReference": map[string]any{
+											"from":               "http",
+											"targetReplicaPath":  "body.target",
+											"currentReplicaPath": "body.origin",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want: []jsonpatchv2.JsonPatchOperation{
+				{
+					Operation: "replace",
+					Path:      "/spec/validateRules/0/renderedCue",
+					Value: `data:      _ @tag(data)
+object:    data.object
+oldObject: data.oldObject
+http:      data.extraParams."http"
+validate: {
+    if http.body.target != _|_ {
+        if http.body.origin != _|_ {
+            // target - target * 0.6 > current
+            if http.body.target-http.body.target*0.6 > http.body.origin-1 {
+                {
+                    valid:  false
+                    reason: "Cannot delete this pod, cause of hitting maxUnavailable(0.6)"
+                }
+            }
+        }
+    }
+}
+`,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "5.1",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
+							{
+								"template": map[string]any{
+									"type": "pab",
+									"podAvailableBadge": map[string]any{
+										"maxUnavailable": "60%",
+										"replicaReference": map[string]any{
+											"from":               "http",
+											"targetReplicaPath":  "body.target",
+											"currentReplicaPath": "body.origin",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
+			name: "5.2",
+			args: args{
+				operation: admissionv1.Update,
+				oldObj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
+							{
+								"template": map[string]any{
+									"type": "pab",
+									"podAvailableBadge": map[string]any{
+										"maxUnavailable": "60%",
+										"replicaReference": map[string]any{
+											"from":               "http",
+											"targetReplicaPath":  "body.target",
+											"currentReplicaPath": "body.origin",
+											"http": map[string]any{
+												"url": "https://xxx.com",
+												"auth": map[string]any{
+													"authUrl":  "https://xxx.com",
+													"username": "xx",
+													"password": "xx",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
+							{
+								"template": map[string]any{
+									"type": "pab",
+									"podAvailableBadge": map[string]any{
 										"maxUnavailable": "60%",
 									},
 								},
@@ -584,7 +1406,7 @@ validate: {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			got, err := policyInterrupter.OnMutating(tt.args.obj, tt.args.oldObj)
+			got, err := policyInterrupter.OnMutating(tt.args.obj, tt.args.oldObj, tt.args.operation)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("OnMutating() error = %v, wantErr %v", err, tt.wantErr)
 				return

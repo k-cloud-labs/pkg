@@ -1300,9 +1300,35 @@ spec:
                                           description: AuthURL represents remote url
                                             to request and get token.
                                           type: string
+                                        expireAt:
+                                          description: ExpireAt sores the token expire
+                                            time. Same as above field, this field
+                                            also updated automatically. This filed
+                                            is not fill by user, so don't edit it.
+                                          format: date-time
+                                          type: string
+                                        expireDuration:
+                                          description: ExpireDuration is providing
+                                            for some auth api won't return exact expire
+                                            time, so can you this field set an expiry
+                                            duration for token
+                                          type: string
                                         password:
                                           description: Password represents Password
                                             for auth.
+                                          type: string
+                                        staticToken:
+                                          description: StaticToken represents for
+                                            static token for call api instead of get
+                                            token from remote api. StaticToken and
+                                            other fields are mutually exclusive, staticToken
+                                            is priority to take effect.
+                                          type: string
+                                        token:
+                                          description: Token stores the latest token
+                                            get from AuthURL, and it'll be updated
+                                            when token expired. This filed is not
+                                            fill by user, so don't edit it.
                                           type: string
                                         username:
                                           description: Username represents username
@@ -1322,6 +1348,9 @@ spec:
                                     method:
                                       description: Method as basic http method(e.g.
                                         GET or POST)
+                                      enum:
+                                      - GET
+                                      - POST
                                       type: string
                                     params:
                                       additionalProperties:

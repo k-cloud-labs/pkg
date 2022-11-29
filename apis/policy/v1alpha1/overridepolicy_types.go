@@ -214,6 +214,7 @@ type HttpDataRef struct {
 	URL string `json:"url,omitempty"`
 	// Method as basic http method(e.g. GET or POST)
 	// +required
+	// +kubebuilder:validation:Enum=GET;POST
 	Method string `json:"method,omitempty"`
 	// Header represents the custom header added to http request header.
 	// +optional
@@ -233,15 +234,31 @@ type HttpDataRef struct {
 
 // HttpRequestAuth defines basic info for get auth token from remote api
 type HttpRequestAuth struct {
+	// StaticToken represents for static token for call api instead of get token from remote api.
+	// StaticToken and other fields are mutually exclusive, staticToken is priority to take effect.
+	// +optional
+	StaticToken string `json:"staticToken,omitempty"`
 	// Username represents username for auth.
-	// +required
+	// +optional
 	Username string `json:"username,omitempty"`
 	// Password represents Password for auth.
-	// +required
+	// +optional
 	Password string `json:"password,omitempty"`
 	// AuthURL represents remote url to request and get token.
-	// +required
+	// +optional
 	AuthURL string `json:"authUrl,omitempty"`
+	// ExpireDuration is providing for some auth api won't return exact expire time, so can you this field set
+	//  an expiry duration for token
+	// +optional
+	ExpireDuration metav1.Duration `json:"expireDuration,omitempty"`
+	// Token stores the latest token get from AuthURL, and it'll be updated when token expired.
+	// This filed is not fill by user, so don't edit it.
+	// +optional
+	Token string `json:"token,omitempty"`
+	// ExpireAt sores the token expire time. Same as above field, this field also updated automatically.
+	// This filed is not fill by user, so don't edit it.
+	// +optional
+	ExpireAt metav1.Time `json:"expireAt,omitempty"`
 }
 
 // ResourcesOversellRule defines factor of resource oversell

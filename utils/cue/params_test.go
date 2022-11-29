@@ -35,10 +35,11 @@ func Test_parseAndGetRefValue(t *testing.T) {
 		value  any
 	}
 	tests := []struct {
-		name    string
-		args    args
-		want    string
-		wantErr bool
+		name     string
+		args     args
+		want     string
+		wantBool bool
+		wantErr  bool
 	}{
 		{
 			name: "normal",
@@ -47,8 +48,9 @@ func Test_parseAndGetRefValue(t *testing.T) {
 				keys:   []string{"metadata", "name"},
 				value:  "name1",
 			},
-			want:    "name1",
-			wantErr: false,
+			want:     "name1",
+			wantBool: true,
+			wantErr:  false,
 		},
 		{
 			name: "normal2",
@@ -57,8 +59,9 @@ func Test_parseAndGetRefValue(t *testing.T) {
 				keys:   []string{"metadata", "namespace"},
 				value:  "ns",
 			},
-			want:    "metadata.name",
-			wantErr: false,
+			want:     "metadata.name",
+			wantBool: true,
+			wantErr:  false,
 		},
 		{
 			name: "normal3",
@@ -67,8 +70,9 @@ func Test_parseAndGetRefValue(t *testing.T) {
 				keys:   []string{"metadata", "namespace"},
 				value:  "ns",
 			},
-			want:    "https://xxxx.com/ns",
-			wantErr: false,
+			want:     "https://xxxx.com/ns",
+			wantBool: true,
+			wantErr:  false,
 		},
 		{
 			name: "error",
@@ -77,7 +81,8 @@ func Test_parseAndGetRefValue(t *testing.T) {
 				keys:   []string{"metadata", "namespace"},
 				value:  "ns",
 			},
-			wantErr: true,
+			wantBool: false,
+			wantErr:  false,
 		},
 		{
 			name: "error2",
@@ -86,20 +91,44 @@ func Test_parseAndGetRefValue(t *testing.T) {
 				keys:   []string{"metadata", "namespace"},
 				value:  "ns",
 			},
-			wantErr: true,
+			wantErr:  false,
+			wantBool: false,
+		},
+		{
+			name: "error3",
+			args: args{
+				refKey: "{{spec.replica}}",
+				keys:   []string{"spec", "replica"},
+				value:  int64(1),
+			},
+			wantErr:  true,
+			wantBool: false,
+		},
+		{
+			name: "error4",
+			args: args{
+				refKey: "{{}}",
+				keys:   []string{"spec", "replica"},
+				value:  int64(1),
+			},
+			wantErr:  true,
+			wantBool: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			obj := newEmptyObj()
 			_ = unstructured.SetNestedField(obj.Object, tt.args.value, tt.args.keys...)
-			got, err := parseAndGetRefValue(tt.args.refKey, obj)
+			got, gotBool, err := parseAndGetRefValue(tt.args.refKey, obj)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("parseAndGetRefValue() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if got != tt.want {
 				t.Errorf("parseAndGetRefValue() got = %v, want %v", got, tt.want)
+			}
+			if gotBool != tt.wantBool {
+				t.Errorf("parseAndGetRefValue() gotBool = %v, want %v", gotBool, tt.wantBool)
 			}
 		})
 	}
@@ -111,10 +140,11 @@ func Test_handleRefSelectLabels(t *testing.T) {
 		obj *unstructured.Unstructured
 	}
 	tests := []struct {
-		name    string
-		args    args
-		want    *metav1.LabelSelector
-		wantErr bool
+		name     string
+		args     args
+		want     *metav1.LabelSelector
+		wantErr  bool
+		wantBool bool
 	}{
 		{
 			name: "label",
@@ -134,7 +164,8 @@ func Test_handleRefSelectLabels(t *testing.T) {
 				},
 				MatchExpressions: make([]metav1.LabelSelectorRequirement, 0),
 			},
-			wantErr: false,
+			wantErr:  false,
+			wantBool: true,
 		},
 		{
 			name: "expression",
@@ -166,7 +197,8 @@ func Test_handleRefSelectLabels(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
+			wantErr:  false,
+			wantBool: true,
 		},
 		{
 			name: "error",
@@ -179,18 +211,39 @@ func Test_handleRefSelectLabels(t *testing.T) {
 				},
 				obj: newBasicObj("name", "ns"),
 			},
-			wantErr: true,
+			wantErr:  false,
+			wantBool: false,
+		},
+		{
+			name: "error",
+			args: args{
+				ls: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "name",
+							Operator: metav1.LabelSelectorOpIn,
+							Values:   []string{"{{metadata.name2}}"},
+						},
+					},
+				},
+				obj: newBasicObj("name", "ns"),
+			},
+			wantErr:  false,
+			wantBool: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := handleRefSelectLabels(tt.args.ls, tt.args.obj)
+			got, gotBool, err := handleRefSelectLabels(tt.args.ls, tt.args.obj)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("handleRefSelectLabels() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("handleRefSelectLabels() got = %v, want %v", got, tt.want)
+			}
+			if gotBool != tt.wantBool {
+				t.Errorf("handleRefSelectLabels() gotBool = %v, want %v", gotBool, tt.wantBool)
 			}
 		})
 	}
@@ -223,27 +276,50 @@ func Test_getHttpResponse(t *testing.T) {
 				},
 			},
 			want: map[string]any{
-				"body": "{\"token\":\"name\"}",
+				"body": map[string]any{
+					"token": "name",
+				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "redirect",
+			name: "auth1",
 			args: args{
 				obj: newBasicObj("name", "ns"),
 				ref: &policyv1alpha1.HttpDataRef{
 					URL:    "http://127.0.0.1:8090/api/v1/token",
 					Method: "GET",
 					Auth: &policyv1alpha1.HttpRequestAuth{
-						Username: "policy_engine_bot",
-						Password: "policy_engine_bot",
-						AuthURL:  "http://127.0.0.1:8090/api/v1/auth",
+						StaticToken: "static",
+						Token:       "dynamic",
 					},
 				},
 			},
 			want: map[string]any{
 				// data get from request header authorization
-				"body": "{\"token\":\"Bearer Basic cG9saWN5X2VuZ2luZV9ib3Q6cG9saWN5X2VuZ2luZV9ib3Q=\"}",
+				"body": map[string]any{
+					"token": "Bearer static",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "auth2",
+			args: args{
+				obj: newBasicObj("name", "ns"),
+				ref: &policyv1alpha1.HttpDataRef{
+					URL:    "http://127.0.0.1:8090/api/v1/token",
+					Method: "GET",
+					Auth: &policyv1alpha1.HttpRequestAuth{
+						Token: "dynamic",
+					},
+				},
+			},
+			want: map[string]any{
+				// data get from request header authorization
+				"body": map[string]any{
+					"token": "Bearer dynamic",
+				},
 			},
 			wantErr: false,
 		},
@@ -541,7 +617,9 @@ func TestBuildCueParamsViaOverridePolicy(t *testing.T) {
 			want: &CueParams{
 				ExtraParams: map[string]any{
 					"http": map[string]any{
-						"body": "{\"token\":\"pod\"}",
+						"body": map[string]any{
+							"token": "pod",
+						},
 					},
 				},
 			},
@@ -696,7 +774,9 @@ func TestBuildCueParamsViaValidatePolicy(t *testing.T) {
 			want: &CueParams{
 				ExtraParams: map[string]any{
 					"http": map[string]any{
-						"body": "{\"token\":\"pod\"}",
+						"body": map[string]any{
+							"token": "pod",
+						},
 					},
 				},
 			},
@@ -777,7 +857,9 @@ func TestBuildCueParamsViaValidatePolicy(t *testing.T) {
 			want: &CueParams{
 				ExtraParams: map[string]any{
 					"http_d": map[string]any{
-						"body": "{\"token\":\"pod\"}",
+						"body": map[string]any{
+							"token": "pod",
+						},
 					},
 				},
 			},
@@ -867,7 +949,9 @@ func TestBuildCueParamsViaValidatePolicy(t *testing.T) {
 			want: &CueParams{
 				ExtraParams: map[string]any{
 					"http": map[string]any{
-						"body": "{\"token\":\"pod\"}",
+						"body": map[string]any{
+							"token": "pod",
+						},
 					},
 				},
 			},
