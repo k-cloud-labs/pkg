@@ -16,6 +16,7 @@ import (
 	"github.com/k-cloud-labs/pkg/utils"
 	"github.com/k-cloud-labs/pkg/utils/cue"
 	"github.com/k-cloud-labs/pkg/utils/dynamiclister"
+	"github.com/k-cloud-labs/pkg/utils/metrics"
 	"github.com/k-cloud-labs/pkg/utils/util"
 )
 
@@ -81,6 +82,7 @@ func (m *validateManagerImpl) applyValidatePolicy(cvp *policyv1alpha1.ClusterVal
 		return &ValidateResult{Valid: true}, nil
 	}
 
+	metrics.ValidatePolicyMatched(cvp.Name, rawObj.GroupVersionKind())
 	klog.V(4).InfoS("resource matched a validate policy", "operation", operation, "policy", cvp.GroupVersionKind(),
 		"resource", fmt.Sprintf("%v/%v/%v", rawObj.GroupVersionKind(), rawObj.GetNamespace(), rawObj.GetName()))
 	for _, rule := range cvp.Spec.ValidateRules {
@@ -109,6 +111,7 @@ func (m *validateManagerImpl) applyValidatePolicy(cvp *policyv1alpha1.ClusterVal
 				klog.V(2).InfoS("Applied validate policy.",
 					"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
 				if !result.Valid {
+					metrics.ValidatePolicyReject(cvp.Name, rawObj.GroupVersionKind())
 					return result, nil
 				}
 			}
@@ -117,6 +120,7 @@ func (m *validateManagerImpl) applyValidatePolicy(cvp *policyv1alpha1.ClusterVal
 		if rule.Cue != "" {
 			result, err := executeCue(rawObj, oldObj, rule.Cue)
 			if err != nil {
+				metrics.PolicyGotError(rawObj.GetName(), rawObj.GroupVersionKind(), metrics.ErrorTypeCueExecute)
 				klog.ErrorS(err, "Failed to apply validate policy.",
 					"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
 				return nil, err
@@ -124,6 +128,7 @@ func (m *validateManagerImpl) applyValidatePolicy(cvp *policyv1alpha1.ClusterVal
 			klog.V(2).InfoS("Applied validate policy.",
 				"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
 			if !result.Valid {
+				metrics.ValidatePolicyReject(cvp.Name, rawObj.GroupVersionKind())
 				return result, nil
 			}
 		}
@@ -146,6 +151,7 @@ func (m *validateManagerImpl) executeTemplate(params *cue.CueParams, rule *polic
 
 	extraParams, err := cue.BuildCueParamsViaValidatePolicy(m.dynamicClient, params.Object, rule.Template)
 	if err != nil {
+		metrics.PolicyGotError(cvpName, params.Object.GroupVersionKind(), metrics.ErrTypePrepareCueParams)
 		klog.ErrorS(err, "Failed to build validate policy params.",
 			"validatepolicy", cvpName, "resource", klog.KObj(params.Object))
 		return nil, err
@@ -169,6 +175,7 @@ func (m *validateManagerImpl) executeTemplate(params *cue.CueParams, rule *polic
 		},
 	})
 	if err != nil {
+		metrics.PolicyGotError(cvpName, params.Object.GroupVersionKind(), metrics.ErrorTypeCueExecute)
 		return nil, err
 	}
 

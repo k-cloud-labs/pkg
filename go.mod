@@ -8,6 +8,7 @@ require (
 	github.com/evanphx/json-patch v4.12.0+incompatible
 	github.com/golang/mock v1.5.0
 	github.com/pkg/errors v0.9.1
+	github.com/prometheus/client_golang v1.11.0
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/term v0.0.0-20210615171337-6886f2dfbf5b
 	gomodules.xyz/jsonpatch/v2 v2.2.0
@@ -51,7 +52,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mpvl/unique v0.0.0-20150818121801-cbe035fff7de // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_golang v1.11.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.28.0 // indirect
 	github.com/prometheus/procfs v0.6.0 // indirect
