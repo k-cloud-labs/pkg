@@ -149,6 +149,18 @@ validate: {
 			wantErr: false,
 		},
 		{
+			name: "1.3",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "OverridePolicy",
+				},
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "2",
 			args: args{
 				operation: admissionv1.Update,
@@ -222,6 +234,18 @@ validate: {
 			wantErr: true,
 		},
 		{
+			name: "2.3",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterOverridePolicy",
+				},
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "3",
 			args: args{
 				operation: admissionv1.Update,
@@ -288,10 +312,22 @@ validate: {
 			},
 			wantErr: true,
 		},
+		{
+			name: "3.3",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+				},
+				},
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := policyInterrupter.OnValidating(tt.args.obj, tt.args.oldObj, admissionv1.Create); (err != nil) != tt.wantErr {
+			if err := policyInterrupter.OnValidating(tt.args.obj, tt.args.oldObj, tt.args.operation); (err != nil) != tt.wantErr {
 				t.Errorf("OnValidating() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
