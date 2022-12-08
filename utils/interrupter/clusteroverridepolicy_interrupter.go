@@ -53,6 +53,9 @@ func (c *clusterOverridePolicyInterrupter) OnMutating(obj, oldObj *unstructured.
 }
 
 func (c *clusterOverridePolicyInterrupter) OnValidating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) error {
+	if operation == admissionv1.Delete {
+		return nil
+	}
 	cop := new(policyv1alpha1.ClusterOverridePolicy)
 	if err := convertToPolicy(obj, cop); err != nil {
 		return err
@@ -174,8 +177,8 @@ func (c *clusterOverridePolicyInterrupter) getTokenCallbackMap(policy *policyv1a
 			}
 		}
 
-		cb.tokenPath = append(cb.tokenPath, fmt.Sprintf("/sepc/overrideRules/%d/overriders/template/valueRef/http/auth/token", i))
-		cb.expirePath = append(cb.tokenPath, fmt.Sprintf("/sepc/overrideRules/%d/overriders/template/valueRef/http/auth/expireAt", i))
+		cb.tokenPath = append(cb.tokenPath, fmt.Sprintf("/spec/overrideRules/%d/overriders/template/valueRef/http/auth/token", i))
+		cb.expirePath = append(cb.tokenPath, fmt.Sprintf("/spec/overrideRules/%d/overriders/template/valueRef/http/auth/expireAt", i))
 		callbackMap[tg.ID()] = cb
 	}
 

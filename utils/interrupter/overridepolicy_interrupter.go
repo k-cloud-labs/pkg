@@ -62,6 +62,10 @@ func (o *overridePolicyInterrupter) OnMutating(obj, oldObj *unstructured.Unstruc
 }
 
 func (o *overridePolicyInterrupter) OnValidating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) error {
+	if operation == admissionv1.Delete {
+		return nil
+	}
+
 	op := new(policyv1alpha1.OverridePolicy)
 	if err := convertToPolicy(obj, op); err != nil {
 		return err
@@ -195,8 +199,8 @@ func (o *overridePolicyInterrupter) getTokenCallbackMap(policy *policyv1alpha1.O
 			}
 		}
 
-		cb.tokenPath = append(cb.tokenPath, fmt.Sprintf("/sepc/overrideRules/%d/overriders/template/valueRef/http/auth/token", i))
-		cb.expirePath = append(cb.tokenPath, fmt.Sprintf("/sepc/overrideRules/%d/overriders/template/valueRef/http/auth/expireAt", i))
+		cb.tokenPath = append(cb.tokenPath, fmt.Sprintf("/spec/overrideRules/%d/overriders/template/valueRef/http/auth/token", i))
+		cb.expirePath = append(cb.expirePath, fmt.Sprintf("/spec/overrideRules/%d/overriders/template/valueRef/http/auth/expireAt", i))
 		callbackMap[tg.ID()] = cb
 	}
 
@@ -246,7 +250,7 @@ func (o *overridePolicyInterrupter) genCallback(impl *tokenCallbackImpl, namespa
 			return err
 		}
 
-		return o.client.Status().Patch(context.Background(), obj, client.RawPatch(types.JSONPatchType, patchBytes))
+		return o.client.Patch(context.Background(), obj, client.RawPatch(types.JSONPatchType, patchBytes))
 	}
 }
 

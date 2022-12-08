@@ -62,6 +62,10 @@ func (v *clusterValidatePolicyInterrupter) OnMutating(obj, oldObj *unstructured.
 }
 
 func (v *clusterValidatePolicyInterrupter) OnValidating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) error {
+	if operation == admissionv1.Delete {
+		return nil
+	}
+
 	cvp := new(policyv1alpha1.ClusterValidatePolicy)
 	if err := convertToPolicy(obj, cvp); err != nil {
 		return err
@@ -215,7 +219,7 @@ func (v *clusterValidatePolicyInterrupter) getTokenCallbackMap(policy *policyv1a
 		}
 
 		cb.tokenPath = append(cb.tokenPath, tokenPath)
-		cb.expirePath = append(cb.tokenPath, expirePath)
+		cb.expirePath = append(cb.expirePath, expirePath)
 		callbackMap[tg.ID()] = cb
 		return nil
 	}
@@ -230,8 +234,8 @@ func (v *clusterValidatePolicyInterrupter) getTokenCallbackMap(policy *policyv1a
 		if tmpl.Condition != nil {
 			if tmpl.Condition.DataRef != nil && tmpl.Condition.DataRef.Http != nil {
 				err := checkAndAppend(tmpl.Condition.DataRef.Http,
-					fmt.Sprintf("/sepc/validateRules/%d/template/condition/dataRef/http/auth/token", i),
-					fmt.Sprintf("/sepc/validateRules/%d/template/condition/dataRef/http/auth/expireAt", i),
+					fmt.Sprintf("/spec/validateRules/%d/template/condition/dataRef/http/auth/token", i),
+					fmt.Sprintf("/spec/validateRules/%d/template/condition/dataRef/http/auth/expireAt", i),
 				)
 				if err != nil {
 					return nil, err
@@ -240,8 +244,8 @@ func (v *clusterValidatePolicyInterrupter) getTokenCallbackMap(policy *policyv1a
 
 			if tmpl.Condition.ValueRef != nil && tmpl.Condition.ValueRef.Http != nil {
 				err := checkAndAppend(tmpl.Condition.DataRef.Http,
-					fmt.Sprintf("/sepc/validateRules/%d/template/condition/valueRef/http/auth/token", i),
-					fmt.Sprintf("/sepc/validateRules/%d/template/condition/valueRef/http/auth/expireAt", i),
+					fmt.Sprintf("/spec/validateRules/%d/template/condition/valueRef/http/auth/token", i),
+					fmt.Sprintf("/spec/validateRules/%d/template/condition/valueRef/http/auth/expireAt", i),
 				)
 				if err != nil {
 					return nil, err
@@ -253,8 +257,8 @@ func (v *clusterValidatePolicyInterrupter) getTokenCallbackMap(policy *policyv1a
 		if tmpl.PodAvailableBadge != nil && tmpl.PodAvailableBadge.ReplicaReference != nil &&
 			tmpl.PodAvailableBadge.ReplicaReference.Http != nil {
 			err := checkAndAppend(tmpl.PodAvailableBadge.ReplicaReference.Http,
-				fmt.Sprintf("/sepc/validateRules/%d/template/AvailableBadge/replicaReference/http/auth/token", i),
-				fmt.Sprintf("/sepc/validateRules/%d/template/AvailableBadge/replicaReference/http/auth/expireAt", i),
+				fmt.Sprintf("/spec/validateRules/%d/template/podAvailableBadge/replicaReference/http/auth/token", i),
+				fmt.Sprintf("/spec/validateRules/%d/template/podAvailableBadge/replicaReference/http/auth/expireAt", i),
 			)
 			if err != nil {
 				return nil, err
@@ -308,6 +312,7 @@ func (v *clusterValidatePolicyInterrupter) genCallback(impl *tokenCallbackImpl, 
 			return err
 		}
 
-		return v.client.Status().Patch(context.Background(), obj, client.RawPatch(types.JSONPatchType, patchBytes))
+		klog.V(4).InfoS("before patch cvp", "cvp", obj.GetName(), "patchBytes", string(patchBytes))
+		return v.client.Patch(context.Background(), obj, client.RawPatch(types.JSONPatchType, patchBytes))
 	}
 }
