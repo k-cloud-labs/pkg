@@ -33,12 +33,15 @@ func (t *tokenManagerImpl) AddToken(generator TokenGenerator, ic IdentifiedCallb
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	klog.V(4).InfoS("addToken", "token.ID", generator.ID(), "callbackAll.ID", ic.ID())
+
 	info, ok := t.tokenMap[generator.ID()]
 	if !ok {
 		info = &tokenMaintainer{
+			name:      generator.ID(),
 			generator: generator,
 			callbacks: make(map[string]IdentifiedCallback),
-			stopChan:  make(chan struct{}),
+			stopChan:  make(chan struct{}, 1),
 			mu:        new(sync.RWMutex),
 		}
 	}
@@ -47,12 +50,16 @@ func (t *tokenManagerImpl) AddToken(generator TokenGenerator, ic IdentifiedCallb
 	t.tokenMap[generator.ID()] = info
 	if !ok {
 		go info.daemon()
+	} else {
+		// callback immediately
+		go info.callback(ic)
 	}
 }
 
 func (t *tokenManagerImpl) RemoveToken(tg TokenGenerator, ic IdentifiedCallback) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	klog.V(4).InfoS("removeToken", "token.ID", tg.ID(), "callbackAll.ID", ic.ID())
 
 	info, ok := t.tokenMap[tg.ID()]
 	if !ok {
@@ -63,6 +70,8 @@ func (t *tokenManagerImpl) RemoveToken(tg TokenGenerator, ic IdentifiedCallback)
 		return
 	}
 
+	klog.V(4).InfoS("stop token", "token.ID", tg.ID(), "callbackAll.ID", ic.ID())
+	delete(t.tokenMap, tg.ID())
 	go info.stop() // block channel
 }
 
@@ -88,6 +97,7 @@ func NewTokenManager() TokenManager {
 }
 
 type tokenMaintainer struct {
+	name      string
 	generator TokenGenerator
 	token     string
 	fetchedAt time.Time
@@ -109,7 +119,15 @@ func (t *tokenMaintainer) updateCallbacks(ic IdentifiedCallback) {
 	t.callbacks[ic.ID()] = ic
 }
 
-func (t *tokenMaintainer) callback() {
+func (t *tokenMaintainer) callback(ic IdentifiedCallback) {
+	if retryErr := retry(func() error {
+		return ic.Callback(t.token, t.expireAt)
+	}, 3, time.Millisecond*100); retryErr != nil {
+		klog.ErrorS(retryErr, "retry callback failed", "id", ic.ID())
+	}
+}
+
+func (t *tokenMaintainer) callbackAll() {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -119,7 +137,7 @@ func (t *tokenMaintainer) callback() {
 				if retryErr := retry(func() error {
 					return cb.Callback(t.token, t.expireAt)
 				}, 3, time.Millisecond*100); retryErr != nil {
-					klog.ErrorS(err, "retry callback failed", "id", id)
+					klog.ErrorS(retryErr, "retry callback failed", "id", id)
 				}
 			}()
 			klog.ErrorS(err, "call refresh token callback error", "id", id)
@@ -127,7 +145,7 @@ func (t *tokenMaintainer) callback() {
 	}
 }
 
-// return true if callback map is empty
+// return true if callbackAll map is empty
 func (t *tokenMaintainer) removeCallback(ic IdentifiedCallback) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -164,25 +182,25 @@ func (t *tokenMaintainer) refreshAndCallback() error {
 		return err
 	}
 
-	t.callback()
+	t.callbackAll()
 	return nil
 }
 
 func (t *tokenMaintainer) daemon() {
 	// attempt to refresh token when it started.
-loop:
 	for {
 		select {
 		case <-t.stopChan:
+			klog.V(4).InfoS("token maintainer stop", "name", t.name)
 			return
 		default:
-			err := t.refreshAndCallback()
-			if err == nil {
-				break loop
-			}
-			klog.ErrorS(err, "refresh token got error", "lastToken", t.token, "id", t.generator.ID())
-			time.Sleep(time.Millisecond * 100)
 		}
+		err := t.refreshAndCallback()
+		if err == nil {
+			break
+		}
+		klog.ErrorS(err, "refresh token got error", "lastToken", t.token, "id", t.generator.ID())
+		time.Sleep(time.Millisecond * 100)
 	}
 
 	var (
@@ -196,6 +214,7 @@ loop:
 	for {
 		select {
 		case <-t.stopChan:
+			klog.V(4).InfoS("token maintainer stop", "name", t.name)
 			return
 		case <-ticker.C:
 			err := t.refreshAndCallback()

@@ -11,6 +11,7 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -54,10 +55,7 @@ func (v *clusterValidatePolicyInterrupter) OnMutating(obj, oldObj *unstructured.
 		return nil, err
 	}
 
-	if err = v.handleValueRef(cvp, old, operation); err != nil {
-		return nil, err
-	}
-
+	v.handleValueRef(cvp, old, operation)
 	return patches, nil
 }
 
@@ -88,6 +86,19 @@ func (v *clusterValidatePolicyInterrupter) OnValidating(obj, oldObj *unstructure
 	}
 
 	return v.validateClusterValidatePolicy(cvp)
+}
+
+func (v *clusterValidatePolicyInterrupter) OnStartUp() error {
+	list, err := v.lister.List(labels.Everything())
+	if err != nil {
+		return err
+	}
+
+	for _, policy := range list {
+		v.handleValueRef(policy, nil, admissionv1.Create)
+	}
+
+	return nil
 }
 
 func NewClusterValidatePolicyInterrupter(interrupter PolicyInterrupter, tm tokenmanager.TokenManager,
@@ -132,20 +143,6 @@ func (v *clusterValidatePolicyInterrupter) patchClusterValidatePolicy(policy *po
 				Value:     policyv1alpha1.AffectModeReject,
 			})
 		}
-		if validateRule.Template.PodAvailableBadge != nil &&
-			validateRule.Template.PodAvailableBadge.ReplicaReference == nil {
-			validateRule.Template.PodAvailableBadge.ReplicaReference = &policyv1alpha1.ReplicaResourceRefer{
-				From:               policyv1alpha1.FromOwnerReference,
-				TargetReplicaPath:  "/spec/replicas",
-				CurrentReplicaPath: "/status/replicas",
-			}
-
-			patches = append(patches, jsonpatchv2.JsonPatchOperation{
-				Operation: "replace",
-				Path:      fmt.Sprintf("/spec/validateRules/%d/template/podAvailableBadge/replicaReference", i),
-				Value:     validateRule.Template.PodAvailableBadge.ReplicaReference,
-			})
-		}
 
 		b, err := v.renderAndFormat(validateRule.Template)
 		if err != nil {
@@ -163,51 +160,56 @@ func (v *clusterValidatePolicyInterrupter) patchClusterValidatePolicy(policy *po
 	return patches, nil
 }
 
-func (v *clusterValidatePolicyInterrupter) handleValueRef(policy, oldPolicy *policyv1alpha1.ClusterValidatePolicy, operation admissionv1.Operation) error {
-	newCallbackMap, err := v.getTokenCallbackMap(policy)
-	if err != nil {
-		return err
-	}
+func (v *clusterValidatePolicyInterrupter) handleValueRef(policy, oldPolicy *policyv1alpha1.ClusterValidatePolicy, operation admissionv1.Operation) {
+	newCallbackMap := v.getTokenCallbackMap(policy)
 
+	var oldCallbackMap map[string]*tokenCallbackImpl
 	if operation == admissionv1.Update && oldPolicy != nil {
-		oldCallbackMap, err := v.getTokenCallbackMap(oldPolicy)
-		if err != nil {
-			return err
-		}
-
-		// remove old and add new
-		for _, impl := range oldCallbackMap {
-			v.tokenManager.RemoveToken(impl.generator, impl)
-		}
+		oldCallbackMap = v.getTokenCallbackMap(oldPolicy)
 	}
 
-	if operation == admissionv1.Create || operation == admissionv1.Update {
+	if operation == admissionv1.Create {
 		for _, impl := range newCallbackMap {
 			v.tokenManager.AddToken(impl.generator, impl)
 		}
-		return nil
+		return
+	}
+
+	if operation == admissionv1.Update {
+		needUpdate, needRemove := compareCallbackMap(newCallbackMap, oldCallbackMap)
+		for _, impl := range needRemove {
+			v.tokenManager.RemoveToken(impl.generator, impl)
+		}
+
+		for _, impl := range needUpdate {
+			v.tokenManager.AddToken(impl.generator, impl)
+		}
+
+		return
 	}
 
 	if operation == admissionv1.Delete {
 		for _, impl := range newCallbackMap {
 			v.tokenManager.RemoveToken(impl.generator, impl)
 		}
-		return nil
 	}
-
-	return nil
 }
 
-func (v *clusterValidatePolicyInterrupter) getTokenCallbackMap(policy *policyv1alpha1.ClusterValidatePolicy) (
-	map[string]*tokenCallbackImpl, error) {
+const (
+	cvpTemplatePath   = "/spec/validateRules/%d/template"
+	dataRefKey        = "dataRef"
+	valueRefKey       = "valueRef"
+	tokenKey          = "token"
+	expireAtKey       = "expireAt"
+	conditionAuthPath = cvpTemplatePath + "/condition/%s/http/auth/%s"
+)
+
+func (v *clusterValidatePolicyInterrupter) getTokenCallbackMap(policy *policyv1alpha1.ClusterValidatePolicy) map[string]*tokenCallbackImpl {
 	callbackMap := make(map[string]*tokenCallbackImpl)
-	checkAndAppend := func(ref *policyv1alpha1.HttpDataRef, tokenPath, expirePath string) error {
-		tg, err := getTokenGeneratorFromRef(ref)
-		if err != nil {
-			return err
-		}
+	checkAndAppend := func(ref *policyv1alpha1.HttpDataRef, tokenPath, expirePath string) {
+		tg := getTokenGeneratorFromRef(ref)
 		if tg == nil {
-			return nil
+			return
 		}
 
 		cb, ok := callbackMap[tg.ID()]
@@ -221,7 +223,6 @@ func (v *clusterValidatePolicyInterrupter) getTokenCallbackMap(policy *policyv1a
 		cb.tokenPath = append(cb.tokenPath, tokenPath)
 		cb.expirePath = append(cb.expirePath, expirePath)
 		callbackMap[tg.ID()] = cb
-		return nil
 	}
 
 	for i, rule := range policy.Spec.ValidateRules {
@@ -233,35 +234,17 @@ func (v *clusterValidatePolicyInterrupter) getTokenCallbackMap(policy *policyv1a
 		// condition
 		if tmpl.Condition != nil {
 			if tmpl.Condition.DataRef != nil && tmpl.Condition.DataRef.Http != nil {
-				err := checkAndAppend(tmpl.Condition.DataRef.Http,
-					fmt.Sprintf("/spec/validateRules/%d/template/condition/dataRef/http/auth/token", i),
-					fmt.Sprintf("/spec/validateRules/%d/template/condition/dataRef/http/auth/expireAt", i),
+				checkAndAppend(tmpl.Condition.DataRef.Http,
+					fmt.Sprintf(conditionAuthPath, i, dataRefKey, tokenKey),
+					fmt.Sprintf(conditionAuthPath, i, dataRefKey, expireAtKey),
 				)
-				if err != nil {
-					return nil, err
-				}
 			}
 
 			if tmpl.Condition.ValueRef != nil && tmpl.Condition.ValueRef.Http != nil {
-				err := checkAndAppend(tmpl.Condition.DataRef.Http,
-					fmt.Sprintf("/spec/validateRules/%d/template/condition/valueRef/http/auth/token", i),
-					fmt.Sprintf("/spec/validateRules/%d/template/condition/valueRef/http/auth/expireAt", i),
+				checkAndAppend(tmpl.Condition.DataRef.Http,
+					fmt.Sprintf(conditionAuthPath, i, valueRefKey, tokenKey),
+					fmt.Sprintf(conditionAuthPath, i, valueRefKey, expireAtKey),
 				)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		// pab
-		if tmpl.PodAvailableBadge != nil && tmpl.PodAvailableBadge.ReplicaReference != nil &&
-			tmpl.PodAvailableBadge.ReplicaReference.Http != nil {
-			err := checkAndAppend(tmpl.PodAvailableBadge.ReplicaReference.Http,
-				fmt.Sprintf("/spec/validateRules/%d/template/podAvailableBadge/replicaReference/http/auth/token", i),
-				fmt.Sprintf("/spec/validateRules/%d/template/podAvailableBadge/replicaReference/http/auth/expireAt", i),
-			)
-			if err != nil {
-				return nil, err
 			}
 		}
 	}
@@ -271,7 +254,7 @@ func (v *clusterValidatePolicyInterrupter) getTokenCallbackMap(policy *policyv1a
 		impl.callback = v.genCallback(impl, policy.Namespace, policy.Name)
 	}
 
-	return callbackMap, nil
+	return callbackMap
 }
 
 func (v *clusterValidatePolicyInterrupter) getPolicy(_, name string) (client.Object, error) {

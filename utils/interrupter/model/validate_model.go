@@ -14,7 +14,6 @@ import (
 type ValidatePolicyRenderData struct {
 	Type      string
 	Condition *ValidateCondition
-	PAB       *PodAvailableBadge
 }
 
 type ValidateCondition struct {
@@ -25,13 +24,6 @@ type ValidateCondition struct {
 	DataRef      *ResourceRefer
 	ValueProcess *ValueProcess
 	Message      string
-}
-
-type PodAvailableBadge struct {
-	IsPercentage     bool
-	MaxUnavailable   *float64
-	MinAvailable     *float64
-	ReplicaReference *ReplicaResourceRefer
 }
 
 func (vrd *ValidatePolicyRenderData) String() string {
@@ -53,14 +45,6 @@ type ResourceRefer struct {
 	Path         string
 }
 
-type ReplicaResourceRefer struct {
-	From policyv1alpha1.ValueRefFrom
-	// will convert to cue reference
-	CueObjectKey       string
-	TargetReplicaPath  string
-	CurrentReplicaPath string
-}
-
 type ValueProcess struct {
 	Operation     policyv1alpha1.OperationType
 	OperationWith float64
@@ -70,7 +54,6 @@ func ValidateRulesToValidatePolicyRenderData(vc *policyv1alpha1.ValidateRuleTemp
 	return &ValidatePolicyRenderData{
 		Type:      string(vc.Type),
 		Condition: convertGeneralCondition(vc.Condition),
-		PAB:       convertPAB(vc.PodAvailableBadge),
 	}
 }
 
@@ -126,28 +109,6 @@ func convertGeneralCondition(vc *policyv1alpha1.ValidateCondition) *ValidateCond
 	return nvc
 }
 
-func convertPAB(pp *policyv1alpha1.PodAvailableBadge) *PodAvailableBadge {
-	if pp == nil {
-		return nil
-	}
-	var (
-		mu           *float64
-		ma           *float64
-		isPercentage bool
-	)
-	mu, isPercentage = intStr2FloatPtr(pp.MaxUnavailable)
-	if mu == nil {
-		ma, isPercentage = intStr2FloatPtr(pp.MinAvailable)
-	}
-
-	return &PodAvailableBadge{
-		IsPercentage:     isPercentage,
-		MaxUnavailable:   mu,
-		MinAvailable:     ma,
-		ReplicaReference: convertReplicaResourceRefer("", pp.ReplicaReference),
-	}
-}
-
 func intStr2FloatPtr(is *intstr.IntOrString) (*float64, bool) {
 	if is == nil {
 		return nil, false
@@ -173,30 +134,6 @@ func intStr2FloatPtr(is *intstr.IntOrString) (*float64, bool) {
 
 	return &f, isPercentage
 
-}
-
-func convertReplicaResourceRefer(suffix string, rf *policyv1alpha1.ReplicaResourceRefer) *ReplicaResourceRefer {
-	if rf == nil {
-		return nil
-	}
-	nrf := &ReplicaResourceRefer{
-		From:               rf.From,
-		TargetReplicaPath:  handlePath(rf.TargetReplicaPath),
-		CurrentReplicaPath: handlePath(rf.CurrentReplicaPath),
-	}
-
-	switch rf.From {
-	case policyv1alpha1.FromCurrentObject:
-		nrf.CueObjectKey = "object"
-	case policyv1alpha1.FromOldObject:
-		nrf.CueObjectKey = "oldObject"
-	case policyv1alpha1.FromK8s, policyv1alpha1.FromOwnerReference:
-		nrf.CueObjectKey = "otherObject" + suffix
-	case policyv1alpha1.FromHTTP:
-		nrf.CueObjectKey = "http" + suffix
-	}
-
-	return nrf
 }
 
 func convertResourceRefer(suffix string, rf *policyv1alpha1.ResourceRefer) *ResourceRefer {

@@ -7,9 +7,6 @@ var ValidateTemplate = `
 	{{if and (eq .Type "condition") (.Condition)}}
 		{{template "ConditionTemplate" .Condition}}
 	{{end}}
-    {{if and (eq .Type "pab") (.PAB)}}
-        {{template "PABTemplate" .PAB}}
-    {{end}}
 {{end}}
 
 {{define "ConditionTemplate"}}
@@ -83,62 +80,5 @@ validate:{
 				if {{.DataRef.CueObjectKey}}.{{.DataRef.Path}} {{.Cond}} {{.ValueRef.CueObjectKey}}.{{.ValueRef.Path}} {
 	    {{end}}
     {{end}}
-{{end}}
-
-{{define "PABTemplate"}}
-{{- /*gotype:github.com/k-cloud-labs/pkg/utils/interrupter/model.PodAvailableBadge*/ -}}
-data: _ @tag(data)
-object: data.object
-oldObject: data.oldObject
-{{if .ReplicaReference}}
-    {{if or (eq .ReplicaReference.From "k8s") (eq .ReplicaReference.From "http") (eq .ReplicaReference.From "owner")}}
-        {{.ReplicaReference.CueObjectKey}} : data.extraParams."{{.ReplicaReference.CueObjectKey}}"
-    {{end}}
-{{end}}
-
-validate:{
-	if {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.TargetReplicaPath}} !=_|_ {
-		if {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.CurrentReplicaPath}} !=_|_ {
-		{{if .MaxUnavailable}}
-			{{if .IsPercentage}}
-				// target - target * {{.MaxUnavailable}} > current
-				if {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.TargetReplicaPath}} - {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.TargetReplicaPath}} * {{.MaxUnavailable}} > {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.CurrentReplicaPath}} - 1 {
-					{
-						valid: false
-						reason: "Cannot delete this pod, cause of hitting maxUnavailable({{.MaxUnavailable}})"
-					}
-				}
-			{{else}}
-				// target - {{.MaxUnavailable}} > current
-				if {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.TargetReplicaPath}} - {{.MaxUnavailable}} > {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.CurrentReplicaPath}} - 1 {
-					{
-						valid: false
-						reason: "Cannot delete this pod, cause of hitting maxUnavailable({{.MaxUnavailable}})"
-					}
-				}
-			{{end}}
-		{{else}}
-			{{/*minAvailable*/}}
-            {{if .IsPercentage}}
-				// target * {{.MinAvailable}} > current
-				if {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.TargetReplicaPath}} * {{.MinAvailable}} > {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.CurrentReplicaPath}} - 1 {
-					{
-						valid: false
-						reason: "Cannot delete this pod, cause of hitting minAvailable({{.MinAvailable}})"
-					}
-				}
-            {{else}}
-				// {{.MinAvailable}} > current
-				if {{.MinAvailable}} > {{.ReplicaReference.CueObjectKey}}.{{.ReplicaReference.CurrentReplicaPath}} - 1 {
-					{
-						valid: false
-						reason: "Cannot delete this pod, cause of hitting maxUnavailable({{.MinAvailable}})"
-					}
-				}
-            {{end}}
-		{{end}}
-		}
-	}
-}
 {{end}}
 `

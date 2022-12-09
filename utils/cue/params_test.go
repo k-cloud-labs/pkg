@@ -9,7 +9,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/util/intstr"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/utils/dynamiclister"
@@ -857,98 +856,6 @@ func TestBuildCueParamsViaValidatePolicy(t *testing.T) {
 			want: &CueParams{
 				ExtraParams: map[string]any{
 					"http_d": map[string]any{
-						"body": map[string]any{
-							"token": "pod",
-						},
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "pab_owner",
-			args: args{
-				c:         dc,
-				curObject: pod,
-				condition: &policyv1alpha1.ValidateRuleTemplate{
-					Type: policyv1alpha1.ValidateRuleTypePodAvailableBadge,
-					PodAvailableBadge: &policyv1alpha1.PodAvailableBadge{
-						MaxUnavailable: &intstr.IntOrString{
-							Type:   intstr.String,
-							StrVal: "60%",
-						},
-						ReplicaReference: &policyv1alpha1.ReplicaResourceRefer{
-							From: policyv1alpha1.FromOwnerReference,
-						},
-					},
-				},
-			},
-			want: &CueParams{
-				ExtraParams: map[string]any{
-					"otherObject": deployObj,
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "pab_k8s",
-			args: args{
-				c:         dc,
-				curObject: pod,
-				condition: &policyv1alpha1.ValidateRuleTemplate{
-					Type: policyv1alpha1.ValidateRuleTypePodAvailableBadge,
-					PodAvailableBadge: &policyv1alpha1.PodAvailableBadge{
-						MaxUnavailable: &intstr.IntOrString{
-							Type:   intstr.String,
-							StrVal: "60%",
-						},
-						ReplicaReference: &policyv1alpha1.ReplicaResourceRefer{
-							From: policyv1alpha1.FromK8s,
-							K8s: &policyv1alpha1.ResourceSelector{
-								APIVersion: "apps/v1",
-								Kind:       "Deployment",
-								Namespace:  "{{metadata.namespace}}",
-								Name:       "{{metadata.annotations.deploy-name}}",
-							},
-						},
-					},
-				},
-			},
-			want: &CueParams{
-				ExtraParams: map[string]any{
-					"otherObject": deployObj,
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "pab_http",
-			args: args{
-				c:         dc,
-				curObject: pod,
-				condition: &policyv1alpha1.ValidateRuleTemplate{
-					Type: policyv1alpha1.ValidateRuleTypePodAvailableBadge,
-					PodAvailableBadge: &policyv1alpha1.PodAvailableBadge{
-						MaxUnavailable: &intstr.IntOrString{
-							Type:   intstr.String,
-							StrVal: "60%",
-						},
-						ReplicaReference: &policyv1alpha1.ReplicaResourceRefer{
-							From: policyv1alpha1.FromHTTP,
-							Http: &policyv1alpha1.HttpDataRef{
-								URL:    "http://127.0.0.1:8090/api/v1/token",
-								Method: "GET",
-								Params: map[string]string{
-									"val": "{{metadata.name}}",
-								},
-							},
-						},
-					},
-				},
-			},
-			want: &CueParams{
-				ExtraParams: map[string]any{
-					"http": map[string]any{
 						"body": map[string]any{
 							"token": "pod",
 						},

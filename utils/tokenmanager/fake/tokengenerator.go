@@ -37,6 +37,10 @@ func (tg *FakeTokenGeneratorImpl) Generate(_ context.Context) (token string, exp
 	return "token", time.Now().Add(defaultExpireDuration), nil
 }
 
+func (tg *FakeTokenGeneratorImpl) Equal(t1 tokenmanager.TokenGenerator) bool {
+	return tg.id == t1.ID()
+}
+
 func (tg *FakeTokenGeneratorImpl) ID() string {
 	return tg.id
 }

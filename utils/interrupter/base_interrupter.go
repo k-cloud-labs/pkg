@@ -33,6 +33,11 @@ func (i *baseInterrupter) OnValidating(obj, oldObj *unstructured.Unstructured, o
 	return nil
 }
 
+func (i *baseInterrupter) OnStartUp() error {
+	// do nothing, need override this method
+	return nil
+}
+
 func NewBaseInterrupter(otm, vtm templatemanager.TemplateManager, cm templatemanager.CueManager) PolicyInterrupter {
 	return &baseInterrupter{
 		overrideTemplateManager: otm,

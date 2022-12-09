@@ -7,6 +7,7 @@ import (
 	jsonpatchv2 "gomodules.xyz/jsonpatch/v2"
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
@@ -45,10 +46,7 @@ func (c *clusterOverridePolicyInterrupter) OnMutating(obj, oldObj *unstructured.
 		return nil, err
 	}
 
-	if err = c.handleValueRef(cop, old, operation); err != nil {
-		return nil, err
-	}
-
+	c.handleValueRef(cop, old, operation)
 	return patches, nil
 }
 
@@ -78,6 +76,19 @@ func (c *clusterOverridePolicyInterrupter) OnValidating(obj, oldObj *unstructure
 	}
 
 	return c.validateOverridePolicy(&cop.Spec)
+}
+
+func (c *clusterOverridePolicyInterrupter) OnStartUp() error {
+	list, err := c.lister.List(labels.Everything())
+	if err != nil {
+		return err
+	}
+
+	for _, policy := range list {
+		c.handleValueRef(policy, nil, admissionv1.Create)
+	}
+
+	return nil
 }
 
 func NewClusterOverridePolicyInterrupter(opInterrupter PolicyInterrupter, lister v1alpha1.ClusterOverridePolicyLister) PolicyInterrupter {
@@ -114,42 +125,42 @@ func (c *clusterOverridePolicyInterrupter) patchOverridePolicy(policy *policyv1a
 	return patches, nil
 }
 
-func (c *clusterOverridePolicyInterrupter) handleValueRef(policy, oldPolicy *policyv1alpha1.ClusterOverridePolicy, operation admissionv1.Operation) error {
-	newCallbackMap, err := c.getTokenCallbackMap(policy)
-	if err != nil {
-		return err
-	}
+func (c *clusterOverridePolicyInterrupter) handleValueRef(policy, oldPolicy *policyv1alpha1.ClusterOverridePolicy, operation admissionv1.Operation) {
+	newCallbackMap := c.getTokenCallbackMap(policy)
 
+	var oldCallbackMap map[string]*tokenCallbackImpl
 	if operation == admissionv1.Update && oldPolicy != nil {
-		oldCallbackMap, err := c.getTokenCallbackMap(oldPolicy)
-		if err != nil {
-			return err
-		}
-
-		// remove old and add new
-		for _, impl := range oldCallbackMap {
-			c.tokenManager.RemoveToken(impl.generator, impl)
-		}
+		oldCallbackMap = c.getTokenCallbackMap(oldPolicy)
 	}
 
-	if operation == admissionv1.Create || operation == admissionv1.Update {
+	if operation == admissionv1.Create {
 		for _, impl := range newCallbackMap {
 			c.tokenManager.AddToken(impl.generator, impl)
 		}
-		return nil
+		return
+	}
+
+	if operation == admissionv1.Update {
+		needUpdate, needRemove := compareCallbackMap(newCallbackMap, oldCallbackMap)
+		for _, impl := range needRemove {
+			c.tokenManager.RemoveToken(impl.generator, impl)
+		}
+
+		for _, impl := range needUpdate {
+			c.tokenManager.AddToken(impl.generator, impl)
+		}
+
+		return
 	}
 
 	if operation == admissionv1.Delete {
 		for _, impl := range newCallbackMap {
 			c.tokenManager.RemoveToken(impl.generator, impl)
 		}
-		return nil
 	}
-
-	return nil
 }
 
-func (c *clusterOverridePolicyInterrupter) getTokenCallbackMap(policy *policyv1alpha1.ClusterOverridePolicy) (map[string]*tokenCallbackImpl, error) {
+func (c *clusterOverridePolicyInterrupter) getTokenCallbackMap(policy *policyv1alpha1.ClusterOverridePolicy) map[string]*tokenCallbackImpl {
 	callbackMap := make(map[string]*tokenCallbackImpl)
 	for i, overrideRule := range policy.Spec.OverrideRules {
 		if overrideRule.Overriders.Template == nil {
@@ -161,10 +172,7 @@ func (c *clusterOverridePolicyInterrupter) getTokenCallbackMap(policy *policyv1a
 			continue
 		}
 
-		tg, err := getTokenGeneratorFromRef(tmpl.ValueRef.Http)
-		if err != nil {
-			return nil, err
-		}
+		tg := getTokenGeneratorFromRef(tmpl.ValueRef.Http)
 		if tg == nil {
 			continue
 		}
@@ -177,8 +185,8 @@ func (c *clusterOverridePolicyInterrupter) getTokenCallbackMap(policy *policyv1a
 			}
 		}
 
-		cb.tokenPath = append(cb.tokenPath, fmt.Sprintf("/spec/overrideRules/%d/overriders/template/valueRef/http/auth/token", i))
-		cb.expirePath = append(cb.tokenPath, fmt.Sprintf("/spec/overrideRules/%d/overriders/template/valueRef/http/auth/expireAt", i))
+		cb.tokenPath = append(cb.tokenPath, fmt.Sprintf(opAuthPath, i, tokenKey))
+		cb.expirePath = append(cb.tokenPath, fmt.Sprintf(opAuthPath, i, expireAtKey))
 		callbackMap[tg.ID()] = cb
 	}
 
@@ -187,7 +195,7 @@ func (c *clusterOverridePolicyInterrupter) getTokenCallbackMap(policy *policyv1a
 		impl.callback = c.genCallback(impl, policy.Namespace, policy.Name)
 	}
 
-	return callbackMap, nil
+	return callbackMap
 }
 
 func (c *clusterOverridePolicyInterrupter) getPolicy(_, name string) (client.Object, error) {

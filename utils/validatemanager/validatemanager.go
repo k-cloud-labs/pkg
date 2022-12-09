@@ -140,15 +140,6 @@ func (m *validateManagerImpl) applyValidatePolicy(cvp *policyv1alpha1.ClusterVal
 }
 
 func (m *validateManagerImpl) executeTemplate(params *cue.CueParams, rule *policyv1alpha1.ValidateRuleWithOperation, cvpName string) (*ValidateResult, error) {
-	if rule.Template.Type == policyv1alpha1.ValidateRuleTypePodAvailableBadge && rule.Template.PodAvailableBadge != nil {
-		// only calculate running pod
-		if phase := getPodPhase(params.Object); phase != corev1.PodRunning {
-			klog.V(4).InfoS("pod phase incorrect", "phase", phase,
-				"pod", params.Object.GetNamespace()+"/", params.Object.GetName())
-			return nil, nil
-		}
-	}
-
 	extraParams, err := cue.BuildCueParamsViaValidatePolicy(m.dynamicClient, params.Object, rule.Template)
 	if err != nil {
 		metrics.PolicyGotError(cvpName, params.Object.GroupVersionKind(), metrics.ErrTypePrepareCueParams)

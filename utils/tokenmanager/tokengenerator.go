@@ -13,6 +13,8 @@ import (
 type TokenGenerator interface {
 	// Generate fetch new token and return expire time as well.
 	Generate(ctx context.Context) (token string, expireAt time.Time, err error)
+	// Equal compares two generator
+	Equal(tg TokenGenerator) bool
 	// ID for identity to where the token belongs.
 	ID() string
 }
@@ -29,7 +31,7 @@ var (
 	defaultExpireDuration = time.Minute * 5 // 5min as default token expire time.
 )
 
-func NewTokenGenerator(authUrl, username, password string, defaultExpire time.Duration) (TokenGenerator, error) {
+func NewTokenGenerator(authUrl, username, password string, defaultExpire time.Duration) TokenGenerator {
 	tg := &tokenGeneratorImpl{
 		authUrl:               authUrl,
 		username:              username,
@@ -38,13 +40,8 @@ func NewTokenGenerator(authUrl, username, password string, defaultExpire time.Du
 	}
 
 	// parse url
-	host, err := tg.getHost()
-	if err != nil {
-		return nil, err
-	}
-
-	tg.id = fmt.Sprintf("%s:%s", host, username)
-	return tg, nil
+	tg.id = fmt.Sprintf("%s:%s", tg.getHost(), username)
+	return tg
 }
 
 type Token struct {
@@ -102,6 +99,15 @@ func (tg *tokenGeneratorImpl) Generate(ctx context.Context) (token string, expir
 	return t.Token, time.Now().Add(defaultExpireDuration), nil
 }
 
+func (tg *tokenGeneratorImpl) Equal(t1 TokenGenerator) bool {
+	v, ok := t1.(*tokenGeneratorImpl)
+	if !ok {
+		return false
+	}
+
+	return tg.authUrl == v.authUrl && tg.username == v.username && tg.password == v.password
+}
+
 func noErr(f func() error) {
 	_ = f()
 }
@@ -110,11 +116,11 @@ func (tg *tokenGeneratorImpl) ID() string {
 	return tg.id
 }
 
-func (tg *tokenGeneratorImpl) getHost() (string, error) {
+func (tg *tokenGeneratorImpl) getHost() string {
 	u, err := url.ParseRequestURI(tg.authUrl)
 	if err != nil {
-		return "", err
+		return tg.authUrl
 	}
 
-	return u.Host, nil
+	return u.Host
 }

@@ -14,7 +14,6 @@ func TestValidatePolicyRenderData_String(t *testing.T) {
 	type fields struct {
 		Type      string
 		Condition *ValidateCondition
-		PAB       *PodAvailableBadge
 	}
 	tests := []struct {
 		name   string
@@ -49,8 +48,7 @@ func TestValidatePolicyRenderData_String(t *testing.T) {
 		},
 		"ValueProcess": null,
 		"Message": "no pass"
-	},
-	"PAB": null
+	}
 }
 `,
 		},
@@ -60,7 +58,6 @@ func TestValidatePolicyRenderData_String(t *testing.T) {
 			vrd := &ValidatePolicyRenderData{
 				Type:      tt.fields.Type,
 				Condition: tt.fields.Condition,
-				PAB:       tt.fields.PAB,
 			}
 			if got := vrd.String(); got != tt.want {
 				t.Errorf("String() = %v, want %v", got, tt.want)
@@ -166,79 +163,6 @@ func Test_convertGeneralCondition(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := convertGeneralCondition(tt.args.vc); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("convertGeneralCondition() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_convertPAB(t *testing.T) {
-	fp := func(f float64) *float64 {
-		return &f
-	}
-	type args struct {
-		pp *policyv1alpha1.PodAvailableBadge
-	}
-	tests := []struct {
-		name string
-		args args
-		want *PodAvailableBadge
-	}{
-		{
-			name: "1",
-			args: args{
-				pp: &policyv1alpha1.PodAvailableBadge{
-					MaxUnavailable: &intstr.IntOrString{
-						Type:   intstr.String,
-						StrVal: "60%",
-					},
-				},
-			},
-			want: &PodAvailableBadge{
-				IsPercentage:   true,
-				MaxUnavailable: fp(0.6),
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := convertPAB(tt.args.pp); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("convertPAB() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_convertReplicaResourceRefer(t *testing.T) {
-	type args struct {
-		suffix string
-		rf     *policyv1alpha1.ReplicaResourceRefer
-	}
-	tests := []struct {
-		name string
-		args args
-		want *ReplicaResourceRefer
-	}{
-		{
-			name: "1",
-			args: args{
-				rf: &policyv1alpha1.ReplicaResourceRefer{
-					From:               policyv1alpha1.FromCurrentObject,
-					TargetReplicaPath:  "/spec/replica",
-					CurrentReplicaPath: "/status/replica",
-				},
-			},
-			want: &ReplicaResourceRefer{
-				From:               policyv1alpha1.FromCurrentObject,
-				CueObjectKey:       "object",
-				TargetReplicaPath:  "spec.replica",
-				CurrentReplicaPath: "status.replica",
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := convertReplicaResourceRefer(tt.args.suffix, tt.args.rf); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("convertReplicaResourceRefer() = %v, want %v", got, tt.want)
 			}
 		})
 	}

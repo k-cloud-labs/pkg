@@ -36,6 +36,10 @@ func (tg *test_tokenGeneratorImpl) Generate(_ context.Context) (token string, ex
 	return "token", time.Now().Add(defaultExpireDuration), nil
 }
 
+func (tg *test_tokenGeneratorImpl) Equal(t1 TokenGenerator) bool {
+	return tg.id == t1.ID()
+}
+
 func (tg *test_tokenGeneratorImpl) ID() string {
 	return tg.id
 }
@@ -78,7 +82,7 @@ func Test_tokenMaintainer_callback(t1 *testing.T) {
 			t := &tokenMaintainer{
 				generator: tt.fields.generator,
 				callbacks: make(map[string]IdentifiedCallback),
-				stopChan:  make(chan struct{}),
+				stopChan:  make(chan struct{}, 1),
 				mu:        new(sync.RWMutex),
 			}
 			t.updateCallbacks(tt.fields.cb)
@@ -87,7 +91,7 @@ func Test_tokenMaintainer_callback(t1 *testing.T) {
 				return
 			}
 
-			t.callback()
+			t.callbackAll()
 		})
 	}
 }
@@ -156,7 +160,7 @@ func Test_tokenMaintainer_refreshAndCallback(t1 *testing.T) {
 			t := &tokenMaintainer{
 				generator: tt.fields.generator,
 				callbacks: make(map[string]IdentifiedCallback),
-				stopChan:  make(chan struct{}),
+				stopChan:  make(chan struct{}, 1),
 				mu:        new(sync.RWMutex),
 			}
 			if err := t.refreshAndCallback(); (err != nil) != tt.wantErr {
@@ -222,7 +226,7 @@ func Test_tokenMaintainer_removeCallback(t1 *testing.T) {
 			t := &tokenMaintainer{
 				generator: tt.fields.generator,
 				callbacks: make(map[string]IdentifiedCallback),
-				stopChan:  make(chan struct{}),
+				stopChan:  make(chan struct{}, 1),
 				mu:        new(sync.RWMutex),
 			}
 
@@ -276,6 +280,7 @@ func Test_tokenManagerImpl_AddToken(t1 *testing.T) {
 	}
 	for _, tt := range tests {
 		t1.Run(tt.name, func(t1 *testing.T) {
+			tt.fields.tg.AddToken(tt.args.generator, tt.args.ic)
 			tt.fields.tg.AddToken(tt.args.generator, tt.args.ic)
 		})
 	}
