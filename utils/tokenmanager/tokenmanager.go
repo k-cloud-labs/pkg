@@ -53,7 +53,9 @@ func (t *tokenManagerImpl) AddToken(generator TokenGenerator, ic IdentifiedCallb
 		go info.daemon()
 	} else {
 		// callback immediately
-		go info.callback(ic)
+		go func() {
+			_ = info.callback(ic)
+		}()
 	}
 }
 
