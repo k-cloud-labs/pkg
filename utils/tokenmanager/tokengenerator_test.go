@@ -165,7 +165,6 @@ func Test_tokenGeneratorImpl_ID(t *testing.T) {
 
 func Test_tokenGeneratorImpl_Equal(t *testing.T) {
 	type fields struct {
-		id                    string
 		authUrl               string
 		username              string
 		password              string

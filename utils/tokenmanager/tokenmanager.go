@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
 	"k8s.io/klog/v2"
 )
 
@@ -38,11 +39,11 @@ func (t *tokenManagerImpl) AddToken(generator TokenGenerator, ic IdentifiedCallb
 	info, ok := t.tokenMap[generator.ID()]
 	if !ok {
 		info = &tokenMaintainer{
-			name:      generator.ID(),
-			generator: generator,
-			callbacks: make(map[string]IdentifiedCallback),
-			stopChan:  make(chan struct{}, 1),
-			mu:        new(sync.RWMutex),
+			name:        generator.ID(),
+			generator:   generator,
+			callbackMap: sync.Map{},
+			stopChan:    make(chan struct{}, 1),
+			valueLock:   new(sync.RWMutex),
 		}
 	}
 
@@ -99,13 +100,14 @@ func NewTokenManager() TokenManager {
 type tokenMaintainer struct {
 	name      string
 	generator TokenGenerator
+	stopChan  chan struct{}
+
+	valueLock *sync.RWMutex
 	token     string
 	fetchedAt time.Time
 	expireAt  time.Time
-	stopChan  chan struct{}
 
-	mu        *sync.RWMutex
-	callbacks map[string]IdentifiedCallback
+	callbackMap sync.Map
 }
 
 func (t *tokenMaintainer) updateCallbacks(ic IdentifiedCallback) {
@@ -113,45 +115,45 @@ func (t *tokenMaintainer) updateCallbacks(ic IdentifiedCallback) {
 		return
 	}
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	t.callbacks[ic.ID()] = ic
+	t.callbackMap.Store(ic.ID(), ic)
 }
 
-func (t *tokenMaintainer) callback(ic IdentifiedCallback) {
+func (t *tokenMaintainer) callback(ic IdentifiedCallback) error {
+	token, expireAt, _ := t.getValues()
 	if retryErr := retry(func() error {
-		return ic.Callback(t.token, t.expireAt)
+		return ic.Callback(token, expireAt)
 	}, 3, time.Millisecond*100); retryErr != nil {
 		klog.ErrorS(retryErr, "retry callback failed", "id", ic.ID())
+		return retryErr
 	}
+
+	return nil
 }
 
-func (t *tokenMaintainer) callbackAll() {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+func (t *tokenMaintainer) callbackAll() error {
 
-	for id, cb := range t.callbacks {
-		if err := cb.Callback(t.token, t.expireAt); err != nil {
-			go func() {
-				if retryErr := retry(func() error {
-					return cb.Callback(t.token, t.expireAt)
-				}, 3, time.Millisecond*100); retryErr != nil {
-					klog.ErrorS(retryErr, "retry callback failed", "id", id)
-				}
-			}()
-			klog.ErrorS(err, "call refresh token callback error", "id", id)
-		}
-	}
+	eg, _ := errgroup.WithContext(context.Background())
+	t.callbackMap.Range(func(_, value any) bool {
+		ic := value.(IdentifiedCallback)
+		eg.Go(func() error {
+			return t.callback(ic)
+		})
+
+		return true
+	})
+
+	return eg.Wait()
 }
 
 // return true if callbackAll map is empty
 func (t *tokenMaintainer) removeCallback(ic IdentifiedCallback) bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	delete(t.callbacks, ic.ID())
-	return len(t.callbacks) == 0
+	t.callbackMap.Delete(ic.ID())
+	var empty = true
+	t.callbackMap.Range(func(key, value any) bool {
+		empty = false
+		return false
+	})
+	return empty
 }
 
 func (t *tokenMaintainer) stop() {
@@ -165,25 +167,39 @@ func (t *tokenMaintainer) refreshToken() error {
 		return err
 	}
 
-	t.fetchedAt = time.Now()
+	_, _, fetchedAt := t.getValues()
 	// token must be at least valid for one minute
-	if expireAt.Before(t.fetchedAt) || expireAt.Sub(t.fetchedAt).Seconds() < 60 {
+	if expireAt.Before(fetchedAt) || expireAt.Sub(fetchedAt).Seconds() < 60 {
 		return errors.New("token valid duration too short or expired already, please extend the valid time")
 	}
 
+	t.setValues(token, expireAt)
+	return nil
+}
+
+func (t *tokenMaintainer) setValues(token string, expireAt time.Time) {
+	t.valueLock.Lock()
+	defer t.valueLock.Unlock()
+
 	t.token = token
 	t.expireAt = expireAt
-	return nil
+	t.fetchedAt = time.Now()
+}
+
+func (t *tokenMaintainer) getValues() (token string, expireAt, fetchAt time.Time) {
+	t.valueLock.RLock()
+	defer t.valueLock.RUnlock()
+
+	return t.token, t.expireAt, t.fetchedAt
 }
 
 func (t *tokenMaintainer) refreshAndCallback() error {
 	if err := t.refreshToken(); err != nil {
-		klog.ErrorS(err, "refresh token got error", "lastToken", t.token, "id", t.generator.ID())
+		klog.ErrorS(err, "refresh token got error", "id", t.generator.ID())
 		return err
 	}
 
-	t.callbackAll()
-	return nil
+	return t.callbackAll()
 }
 
 func (t *tokenMaintainer) daemon() {
@@ -199,12 +215,13 @@ func (t *tokenMaintainer) daemon() {
 		if err == nil {
 			break
 		}
-		klog.ErrorS(err, "refresh token got error", "lastToken", t.token, "id", t.generator.ID())
+		klog.ErrorS(err, "refresh token got error", "id", t.generator.ID())
 		time.Sleep(time.Millisecond * 100)
 	}
 
+	_, expireAt, fetchedAt := t.getValues()
 	var (
-		expireSeconds = t.expireAt.Sub(t.fetchedAt).Seconds()
+		expireSeconds = expireAt.Sub(fetchedAt).Seconds()
 		duration      = expireSeconds / 10
 		ticker        = time.NewTicker(time.Duration(duration) * time.Second)
 		heartBeat     = time.NewTicker(time.Second)
@@ -227,7 +244,7 @@ func (t *tokenMaintainer) daemon() {
 			if refreshFailed {
 				// will retry 3 times inside
 				if err := t.refreshAndCallback(); err != nil {
-					klog.ErrorS(err, "refresh token got error", "lastToken", t.token, "id", t.generator.ID())
+					klog.ErrorS(err, "refresh token got error", "id", t.generator.ID())
 					continue
 				}
 				// reset

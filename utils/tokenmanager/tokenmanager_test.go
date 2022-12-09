@@ -80,10 +80,10 @@ func Test_tokenMaintainer_callback(t1 *testing.T) {
 	for _, tt := range tests {
 		t1.Run(tt.name, func(t1 *testing.T) {
 			t := &tokenMaintainer{
-				generator: tt.fields.generator,
-				callbacks: make(map[string]IdentifiedCallback),
-				stopChan:  make(chan struct{}, 1),
-				mu:        new(sync.RWMutex),
+				generator:   tt.fields.generator,
+				callbackMap: sync.Map{},
+				stopChan:    make(chan struct{}, 1),
+				valueLock:   new(sync.RWMutex),
 			}
 			t.updateCallbacks(tt.fields.cb)
 			if err := t.refreshToken(); err != nil {
@@ -91,7 +91,10 @@ func Test_tokenMaintainer_callback(t1 *testing.T) {
 				return
 			}
 
-			t.callbackAll()
+			if err := t.callbackAll(); err != nil {
+				t1.Error(err)
+				return
+			}
 		})
 	}
 }
@@ -140,14 +143,6 @@ func Test_tokenMaintainer_refreshAndCallback(t1 *testing.T) {
 				cb: &test_callback{
 					id: "t1",
 					callback: func(token string, expireAt time.Time) error {
-						if token == "token" {
-							return nil
-						}
-
-						if expireAt.Before(time.Now()) {
-							return fmt.Errorf("token expired")
-						}
-
 						return fmt.Errorf("token is not correct(%v)", token)
 					},
 				},
@@ -158,11 +153,12 @@ func Test_tokenMaintainer_refreshAndCallback(t1 *testing.T) {
 	for _, tt := range tests {
 		t1.Run(tt.name, func(t1 *testing.T) {
 			t := &tokenMaintainer{
-				generator: tt.fields.generator,
-				callbacks: make(map[string]IdentifiedCallback),
-				stopChan:  make(chan struct{}, 1),
-				mu:        new(sync.RWMutex),
+				generator:   tt.fields.generator,
+				callbackMap: sync.Map{},
+				stopChan:    make(chan struct{}, 1),
+				valueLock:   new(sync.RWMutex),
 			}
+			t.updateCallbacks(tt.fields.cb)
 			if err := t.refreshAndCallback(); (err != nil) != tt.wantErr {
 				t1.Errorf("refreshAndCallback() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -224,10 +220,10 @@ func Test_tokenMaintainer_removeCallback(t1 *testing.T) {
 	for _, tt := range tests {
 		t1.Run(tt.name, func(t1 *testing.T) {
 			t := &tokenMaintainer{
-				generator: tt.fields.generator,
-				callbacks: make(map[string]IdentifiedCallback),
-				stopChan:  make(chan struct{}, 1),
-				mu:        new(sync.RWMutex),
+				generator:   tt.fields.generator,
+				callbackMap: sync.Map{},
+				stopChan:    make(chan struct{}, 1),
+				valueLock:   new(sync.RWMutex),
 			}
 
 			t.updateCallbacks(tt.fields.cb)

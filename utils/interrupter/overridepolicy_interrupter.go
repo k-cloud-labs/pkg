@@ -292,15 +292,6 @@ func (t *tokenCallbackImpl) Callback(token string, expireAt time.Time) error {
 	return t.callback(token, expireAt)
 }
 
-func copyCallbackMap(m map[string]*tokenCallbackImpl) map[string]*tokenCallbackImpl {
-	nm := make(map[string]*tokenCallbackImpl)
-	for s, impl := range m {
-		nm[s] = impl
-	}
-
-	return nm
-}
-
 func compareCallbackMap(cur, old map[string]*tokenCallbackImpl) (update, remove map[string]*tokenCallbackImpl) {
 	update = make(map[string]*tokenCallbackImpl)
 	remove = make(map[string]*tokenCallbackImpl)
