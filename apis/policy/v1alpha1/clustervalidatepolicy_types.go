@@ -49,7 +49,6 @@ type ValidateRuleWithOperation struct {
 	// Template of condition which defines validate cond, and
 	// it will be rendered to CUE and store in RenderedCue field, so
 	// if there are any data added manually will be erased.
-	// Note: template and podAvailableBadge are **MUTUALLY EXCLUSIVE**, template is priority to take effect.
 	// +optional
 	Template *ValidateRuleTemplate `json:"template,omitempty"`
 
@@ -62,26 +61,21 @@ type ValidateRuleWithOperation struct {
 // ValidateRuleTemplate defines template for validate rule
 type ValidateRuleTemplate struct {
 	// Type represents current rule operate field type.
-	// +kubebuilder:validation:Enum=condition;pab
+	// +kubebuilder:validation:Enum=condition
 	// +required
 	Type ValidateRuleType `json:"type,omitempty"`
 	// Condition represents general condition rule for more custom demand.
 	// +optional
 	Condition *ValidateCondition `json:"condition,omitempty"`
-	// PodAvailableBadge stores the number or percentage to make sure a group pod won't down to zero replica.
-	// +optional
-	PodAvailableBadge *PodAvailableBadge `json:"podAvailableBadge,omitempty"`
 }
 
 // ValidateRuleType is definition for type of single validate rule template
-// +kubebuilder:validation:Enum=condition;pab
+// +kubebuilder:validation:Enum=condition
 type ValidateRuleType string
 
 const (
 	// ValidateRuleTypeCondition - general rule type
 	ValidateRuleTypeCondition = "condition"
-	// ValidateRuleTypePodAvailableBadge - rule of pod available badge
-	ValidateRuleTypePodAvailableBadge = "pab"
 	// add more types here...
 )
 
@@ -182,47 +176,6 @@ const (
 	// OperationTypeDivide represents divide(/) operate
 	OperationTypeDivide = "/"
 )
-
-type PodAvailableBadge struct {
-	// MaxUnavailable sets the percentage or number of max unavailable pod of workload.
-	// e.g. if sets 60% and workload replicas is 5, then maxUnavailable is 3
-	// maxUnavailable and minAvailable are mutually exclusive, maxUnavailable is priority to take effect.
-	// +optional
-	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
-	// MinAvailable sets the percentage or number of min available pod of workload.
-	// e.g. if sets 40% and workload replicas is 5, then minAvailable is 2.
-	// +optional
-	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty"`
-	// ReplicaReference represents owner of current pod, in default case no need to set this field since
-	// in most of the cases we can get replicas of owner workload. But in some cases, pod might run without
-	// owner workload, so it need to get replicas from some other resource or remote api.
-	// +optional
-	ReplicaReference *ReplicaResourceRefer `json:"replicaReference,omitempty"`
-}
-
-// ReplicaResourceRefer defines different types of replica ref data
-type ReplicaResourceRefer struct {
-	// From represents where this referenced object are.
-	// +kubebuilder:validation:Enum=current;old;k8s;owner;http
-	// +required
-	From ValueRefFrom `json:"from,omitempty"`
-	// TargetReplicaPath represents the path of target replica field from k8s resource or http response.
-	// For k8s resource, usually put "/spec/replica"
-	// For http resource, put something like "body.data.targetReplica"
-	// +optional
-	TargetReplicaPath string `json:"targetReplicaPath,omitempty"`
-	// CurrentReplicaPath represents the path of current replica field from k8s resource or http response.
-	// For k8s resource, usually put "/status/replica"
-	// For http resource, put something like "body.data.currentReplica"
-	// +optional
-	CurrentReplicaPath string `json:"currentReplicaPath,omitempty"`
-	// K8s means refer another object from current cluster.
-	// +optional
-	K8s *ResourceSelector `json:"k8s,omitempty"`
-	// Http means refer data from remote api.
-	// +optional
-	Http *HttpDataRef `json:"http,omitempty"`
-}
 
 // +genclient
 // +genclient:nonNamespaced

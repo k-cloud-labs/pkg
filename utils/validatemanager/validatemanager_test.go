@@ -11,7 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/klog/v2"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
@@ -95,26 +94,6 @@ validate: {
 `,
 				}}}}
 
-	validatePolicy4 := &policyv1alpha1.ClusterValidatePolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "validatepolicy4",
-		},
-		Spec: policyv1alpha1.ClusterValidatePolicySpec{
-			ValidateRules: []policyv1alpha1.ValidateRuleWithOperation{
-				{
-					TargetOperations: []admissionv1.Operation{admissionv1.Delete},
-					Template: &policyv1alpha1.ValidateRuleTemplate{
-						Type: policyv1alpha1.ValidateRuleTypePodAvailableBadge,
-						PodAvailableBadge: &policyv1alpha1.PodAvailableBadge{
-							MaxUnavailable: &intstr.IntOrString{
-								Type:   intstr.String,
-								StrVal: "40%",
-							},
-						},
-					},
-					RenderedCue: ``,
-				}}}}
-
 	tests := []struct {
 		name         string
 		operation    admissionv1.Operation
@@ -165,7 +144,6 @@ validate: {
 		validatePolicy1,
 		validatePolicy2,
 		validatePolicy3,
-		validatePolicy4,
 	}, nil).AnyTimes()
 
 	for _, tt := range tests {

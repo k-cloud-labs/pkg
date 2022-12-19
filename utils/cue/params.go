@@ -68,8 +68,6 @@ func BuildCueParamsViaValidatePolicy(c dynamiclister.DynamicResourceLister, curO
 	switch tmpl.Type {
 	case policyv1alpha1.ValidateRuleTypeCondition:
 		return buildCueParamsForValidateCondition(c, curObject, tmpl.Condition)
-	case policyv1alpha1.ValidateRuleTypePodAvailableBadge:
-		return buildCueParamsForPAB(c, curObject, tmpl.PodAvailableBadge)
 	default:
 		return nil, fmt.Errorf("unknown template type(%v)", tmpl.Type)
 	}
@@ -129,40 +127,6 @@ func buildCueParamsForValidateCondition(c dynamiclister.DynamicResourceLister, c
 			}
 			cp.ExtraParams["http_d"] = obj
 		}
-	}
-
-	return cp, nil
-}
-
-func buildCueParamsForPAB(c dynamiclister.DynamicResourceLister, curObject *unstructured.Unstructured, pab *policyv1alpha1.PodAvailableBadge) (*CueParams, error) {
-	var cp = &CueParams{
-		ExtraParams: make(map[string]any),
-	}
-
-	if pab.ReplicaReference == nil || pab.ReplicaReference.From == policyv1alpha1.FromOwnerReference {
-		// get owner reference in default case
-		obj, err := getOwnerReference(c, curObject)
-		if err != nil {
-			return nil, fmt.Errorf("getOwnerReference got error=%w", err)
-		}
-		cp.ExtraParams["otherObject"] = obj
-		return cp, nil
-	}
-
-	if pab.ReplicaReference.From == policyv1alpha1.FromK8s {
-		obj, err := getObject(c, curObject, pab.ReplicaReference.K8s)
-		if err != nil {
-			return nil, fmt.Errorf("getObject got error=%w", err)
-		}
-		cp.ExtraParams["otherObject"] = obj
-	}
-
-	if pab.ReplicaReference.From == policyv1alpha1.FromHTTP {
-		obj, err := getHttpResponse(nil, curObject, pab.ReplicaReference.Http)
-		if err != nil {
-			return nil, fmt.Errorf("getHttpResponse got error=%w", err)
-		}
-		cp.ExtraParams["http"] = obj
 	}
 
 	return cp, nil

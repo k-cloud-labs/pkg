@@ -80,26 +80,6 @@ func Test_baseInterrupter_renderAndFormat(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "validatePAB",
-			args: args{
-				data: &policyv1alpha1.ValidateRuleTemplate{
-					Type: policyv1alpha1.ValidateRuleTypePodAvailableBadge,
-					PodAvailableBadge: &policyv1alpha1.PodAvailableBadge{
-						MaxUnavailable: &intstr.IntOrString{
-							Type:   intstr.String,
-							StrVal: "60%",
-						},
-						ReplicaReference: &policyv1alpha1.ReplicaResourceRefer{
-							From:               policyv1alpha1.FromOwnerReference,
-							TargetReplicaPath:  "/spec/replica",
-							CurrentReplicaPath: "/status/replica",
-						},
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
 			name: "overridePolicy",
 			args: args{
 				data: &policyv1alpha1.OverrideRuleTemplate{

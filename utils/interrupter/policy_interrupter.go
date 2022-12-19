@@ -1,11 +1,13 @@
 package interrupter
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"sync"
 
 	jsonpatch "github.com/evanphx/json-patch"
+	"golang.org/x/sync/errgroup"
 	jsonpatchv2 "gomodules.xyz/jsonpatch/v2"
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -32,6 +34,9 @@ type PolicyInterrupter interface {
 	// OnValidating called on "/validating" api to validate policy
 	// return nil means obj is not defined policy or no invalid field
 	OnValidating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) error
+	// OnStartUp called when webhook process initialize
+	// return error if initial phase get any error
+	OnStartUp() error
 }
 
 type policyInterrupterImpl struct {
@@ -86,6 +91,17 @@ func (p *policyInterrupterImpl) getInterrupter(obj *unstructured.Unstructured) P
 	}
 
 	return nil
+}
+
+func (p *policyInterrupterImpl) OnStartUp() error {
+	eg, _ := errgroup.WithContext(context.Background())
+	p.interrupters.Range(func(key, value any) bool {
+		interrupter := value.(PolicyInterrupter)
+		eg.Go(interrupter.OnStartUp)
+		return true
+	})
+
+	return eg.Wait()
 }
 
 func (p *policyInterrupterImpl) AddInterrupter(gvk schema.GroupVersionKind, pi PolicyInterrupter) {

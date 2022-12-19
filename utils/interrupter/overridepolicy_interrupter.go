@@ -11,6 +11,7 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -54,14 +55,15 @@ func (o *overridePolicyInterrupter) OnMutating(obj, oldObj *unstructured.Unstruc
 		return nil, err
 	}
 
-	if err = o.handleValueRef(op, old, operation); err != nil {
-		return nil, err
-	}
-
+	o.handleValueRef(op, old, operation)
 	return patches, nil
 }
 
 func (o *overridePolicyInterrupter) OnValidating(obj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) error {
+	if operation == admissionv1.Delete {
+		return nil
+	}
+
 	op := new(policyv1alpha1.OverridePolicy)
 	if err := convertToPolicy(obj, op); err != nil {
 		return err
@@ -84,6 +86,19 @@ func (o *overridePolicyInterrupter) OnValidating(obj, oldObj *unstructured.Unstr
 	}
 
 	return o.validateOverridePolicy(&op.Spec)
+}
+
+func (o *overridePolicyInterrupter) OnStartUp() error {
+	list, err := o.lister.List(labels.Everything())
+	if err != nil {
+		return err
+	}
+
+	for _, policy := range list {
+		o.handleValueRef(policy, nil, admissionv1.Create)
+	}
+
+	return nil
 }
 
 func NewOverridePolicyInterrupter(interrupter PolicyInterrupter, tm tokenmanager.TokenManager, client client.Client, lister v1alpha1.OverridePolicyLister) PolicyInterrupter {
@@ -132,42 +147,47 @@ func (o *overridePolicyInterrupter) patchOverridePolicy(policy *policyv1alpha1.O
 	return patches, nil
 }
 
-func (o *overridePolicyInterrupter) handleValueRef(policy, oldPolicy *policyv1alpha1.OverridePolicy, operation admissionv1.Operation) error {
-	newCallbackMap, err := o.getTokenCallbackMap(policy)
-	if err != nil {
-		return err
-	}
+func (o *overridePolicyInterrupter) handleValueRef(policy, oldPolicy *policyv1alpha1.OverridePolicy, operation admissionv1.Operation) {
+	newCallbackMap := o.getTokenCallbackMap(policy)
 
+	var oldCallbackMap map[string]*tokenCallbackImpl
 	if operation == admissionv1.Update && oldPolicy != nil {
-		oldCallbackMap, err := o.getTokenCallbackMap(oldPolicy)
-		if err != nil {
-			return err
-		}
-
-		// remove old and add new
-		for _, impl := range oldCallbackMap {
-			o.tokenManager.RemoveToken(impl.generator, impl)
-		}
+		oldCallbackMap = o.getTokenCallbackMap(oldPolicy)
 	}
 
-	if operation == admissionv1.Create || operation == admissionv1.Update {
+	if operation == admissionv1.Create {
 		for _, impl := range newCallbackMap {
 			o.tokenManager.AddToken(impl.generator, impl)
 		}
-		return nil
+		return
+	}
+
+	if operation == admissionv1.Update {
+		needUpdate, needRemove := compareCallbackMap(newCallbackMap, oldCallbackMap)
+		for _, impl := range needRemove {
+			o.tokenManager.RemoveToken(impl.generator, impl)
+		}
+
+		for _, impl := range needUpdate {
+			o.tokenManager.AddToken(impl.generator, impl)
+		}
+
+		return
 	}
 
 	if operation == admissionv1.Delete {
 		for _, impl := range newCallbackMap {
 			o.tokenManager.RemoveToken(impl.generator, impl)
 		}
-		return nil
 	}
-
-	return nil
 }
 
-func (o *overridePolicyInterrupter) getTokenCallbackMap(policy *policyv1alpha1.OverridePolicy) (map[string]*tokenCallbackImpl, error) {
+const (
+	opTemplatePath = "/spec/overrideRules/%d/overriders/template"
+	opAuthPath     = opTemplatePath + "/valueRef/http/auth/%s"
+)
+
+func (o *overridePolicyInterrupter) getTokenCallbackMap(policy *policyv1alpha1.OverridePolicy) map[string]*tokenCallbackImpl {
 	callbackMap := make(map[string]*tokenCallbackImpl)
 	for i, overrideRule := range policy.Spec.OverrideRules {
 		if overrideRule.Overriders.Template == nil {
@@ -179,10 +199,7 @@ func (o *overridePolicyInterrupter) getTokenCallbackMap(policy *policyv1alpha1.O
 			continue
 		}
 
-		tg, err := getTokenGeneratorFromRef(tmpl.ValueRef.Http)
-		if err != nil {
-			return nil, err
-		}
+		tg := getTokenGeneratorFromRef(tmpl.ValueRef.Http)
 		if tg == nil {
 			continue
 		}
@@ -195,8 +212,8 @@ func (o *overridePolicyInterrupter) getTokenCallbackMap(policy *policyv1alpha1.O
 			}
 		}
 
-		cb.tokenPath = append(cb.tokenPath, fmt.Sprintf("/sepc/overrideRules/%d/overriders/template/valueRef/http/auth/token", i))
-		cb.expirePath = append(cb.tokenPath, fmt.Sprintf("/sepc/overrideRules/%d/overriders/template/valueRef/http/auth/expireAt", i))
+		cb.tokenPath = append(cb.tokenPath, fmt.Sprintf(opAuthPath, i, tokenKey))
+		cb.expirePath = append(cb.expirePath, fmt.Sprintf(opAuthPath, i, expireAtKey))
 		callbackMap[tg.ID()] = cb
 	}
 
@@ -205,7 +222,7 @@ func (o *overridePolicyInterrupter) getTokenCallbackMap(policy *policyv1alpha1.O
 		impl.callback = o.genCallback(impl, policy.Namespace, policy.Name)
 	}
 
-	return callbackMap, nil
+	return callbackMap
 }
 
 func (o *overridePolicyInterrupter) getPolicy(namespace, name string) (client.Object, error) {
@@ -246,21 +263,13 @@ func (o *overridePolicyInterrupter) genCallback(impl *tokenCallbackImpl, namespa
 			return err
 		}
 
-		return o.client.Status().Patch(context.Background(), obj, client.RawPatch(types.JSONPatchType, patchBytes))
+		return o.client.Patch(context.Background(), obj, client.RawPatch(types.JSONPatchType, patchBytes))
 	}
 }
 
-func getTokenGeneratorFromRef(ref *policyv1alpha1.HttpDataRef) (tokenmanager.TokenGenerator, error) {
-	if ref == nil {
-		return nil, nil
-	}
-
-	if ref.Auth == nil || ref.Auth.StaticToken != "" {
-		return nil, nil
-	}
-
-	if ref.Auth.AuthURL == "" {
-		return nil, nil
+func getTokenGeneratorFromRef(ref *policyv1alpha1.HttpDataRef) tokenmanager.TokenGenerator {
+	if ref == nil || ref.Auth == nil || ref.Auth.StaticToken != "" || ref.Auth.AuthURL == "" {
+		return nil
 	}
 
 	return tokenmanager.NewTokenGenerator(ref.Auth.AuthURL, ref.Auth.Username, ref.Auth.Password, ref.Auth.ExpireDuration.Duration)
@@ -281,4 +290,31 @@ func (t *tokenCallbackImpl) ID() string {
 
 func (t *tokenCallbackImpl) Callback(token string, expireAt time.Time) error {
 	return t.callback(token, expireAt)
+}
+
+func compareCallbackMap(cur, old map[string]*tokenCallbackImpl) (update, remove map[string]*tokenCallbackImpl) {
+	update = make(map[string]*tokenCallbackImpl)
+	remove = make(map[string]*tokenCallbackImpl)
+
+	for s, impl := range old {
+		if _, ok := cur[s]; !ok {
+			remove[s] = impl
+		}
+	}
+
+	for s, impl := range cur {
+		if _, ok := old[s]; !ok {
+			update[s] = impl
+			continue
+		}
+
+		// exist
+		oldImpl := old[s]
+		if !impl.generator.Equal(oldImpl.generator) {
+			remove[s] = oldImpl
+			update[s] = impl
+		}
+	}
+
+	return
 }

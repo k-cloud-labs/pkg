@@ -42,9 +42,8 @@ func TestNewTokenGenerator(t *testing.T) {
 		defaultExpire time.Duration
 	}
 	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
+		name string
+		args args
 	}{
 		{
 			name: "normal",
@@ -54,7 +53,6 @@ func TestNewTokenGenerator(t *testing.T) {
 				password:      "****",
 				defaultExpire: time.Hour,
 			},
-			wantErr: false,
 		},
 		{
 			name: "error",
@@ -64,14 +62,13 @@ func TestNewTokenGenerator(t *testing.T) {
 				password:      "****",
 				defaultExpire: time.Hour,
 			},
-			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewTokenGenerator(tt.args.authUrl, tt.args.username, tt.args.password, tt.args.defaultExpire)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("NewTokenGenerator() error = %v, wantErr %v", err, tt.wantErr)
+			tg := NewTokenGenerator(tt.args.authUrl, tt.args.username, tt.args.password, tt.args.defaultExpire)
+			if tg == nil {
+				t.Errorf("NewTokenGenerator() is nil ")
 				return
 			}
 		})
@@ -117,11 +114,7 @@ func Test_tokenGeneratorImpl_Generate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tg, err := NewTokenGenerator(tt.fields.authUrl, tt.fields.username, tt.fields.password, tt.fields.defaultExpireDuration)
-			if err != nil {
-				t.Errorf("NewTokenGenerator() error = %v", err)
-				return
-			}
+			tg := NewTokenGenerator(tt.fields.authUrl, tt.fields.username, tt.fields.password, tt.fields.defaultExpireDuration)
 			gotToken, gotExpireAt, err := tg.Generate(tt.args.ctx)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Generate() error = %v, wantErr %v", err, tt.wantErr)
@@ -162,13 +155,58 @@ func Test_tokenGeneratorImpl_ID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tg, err := NewTokenGenerator(tt.fields.authUrl, tt.fields.username, tt.fields.password, tt.fields.defaultExpireDuration)
-			if err != nil {
-				t.Errorf("NewTokenGenerator() error = %v", err)
-				return
-			}
+			tg := NewTokenGenerator(tt.fields.authUrl, tt.fields.username, tt.fields.password, tt.fields.defaultExpireDuration)
 			if got := tg.ID(); got != tt.want {
 				t.Errorf("ID() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_tokenGeneratorImpl_Equal(t *testing.T) {
+	type fields struct {
+		authUrl               string
+		username              string
+		password              string
+		defaultExpireDuration time.Duration
+	}
+	type args struct {
+		t1 TokenGenerator
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   bool
+	}{
+		{
+			name: "1",
+			fields: fields{
+				authUrl:               "http://127.0.0.1:8090/api/v1/auth",
+				username:              "kinitiras",
+				password:              "****",
+				defaultExpireDuration: time.Hour,
+			},
+			args: args{t1: NewTokenGenerator("http://127.0.0.1:8090/api/v1/auth", "kinitiras", "****", time.Hour)},
+			want: true,
+		},
+		{
+			name: "2",
+			fields: fields{
+				authUrl:               "http://127.0.0.1:8090/api/v1/auth",
+				username:              "kinitiras",
+				password:              "****",
+				defaultExpireDuration: time.Hour,
+			},
+			args: args{t1: NewTokenGenerator("http://127.0.0.1:8090/api/v1/auth", "kinitiras", "**", time.Hour)},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tg := NewTokenGenerator(tt.fields.authUrl, tt.fields.username, tt.fields.password, tt.fields.defaultExpireDuration)
+			if got := tg.Equal(tt.args.t1); got != tt.want {
+				t.Errorf("Equal() = %v, want %v", got, tt.want)
 			}
 		})
 	}

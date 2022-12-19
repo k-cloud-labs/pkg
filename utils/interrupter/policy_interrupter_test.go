@@ -4,16 +4,19 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	jsonpatchv2 "gomodules.xyz/jsonpatch/v2"
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
+	"github.com/k-cloud-labs/pkg/test/mock"
 	fakedtokenmanager "github.com/k-cloud-labs/pkg/utils/tokenmanager/fake"
 )
 
-func test_fakePolicyInterrupterManager() (PolicyInterrupterManager, error) {
+func test_fakePolicyInterrupterManager(t *testing.T) (PolicyInterrupterManager, error) {
 	// base
 	baseInterrupter, err := test_baseInterrupter()
 	if err != nil {
@@ -23,8 +26,17 @@ func test_fakePolicyInterrupterManager() (PolicyInterrupterManager, error) {
 	policyInterrupterManager := NewPolicyInterrupterManager()
 	tokenManager := fakedtokenmanager.NewFakeTokenGenerator()
 
+	ctrl := gomock.NewController(t)
+
+	opLister := mock.NewMockOverridePolicyLister(ctrl)
+	opLister.EXPECT().List(labels.Everything()).Return([]*policyv1alpha1.OverridePolicy{}, nil).AnyTimes()
+	copLister := mock.NewMockClusterOverridePolicyLister(ctrl)
+	copLister.EXPECT().List(labels.Everything()).Return([]*policyv1alpha1.ClusterOverridePolicy{}, nil).AnyTimes()
+	cvpLister := mock.NewMockClusterValidatePolicyLister(ctrl)
+	cvpLister.EXPECT().List(labels.Everything()).Return([]*policyv1alpha1.ClusterValidatePolicy{}, nil).AnyTimes()
+
 	// op
-	overridePolicyInterrupter := NewOverridePolicyInterrupter(baseInterrupter, tokenManager, nil, nil)
+	overridePolicyInterrupter := NewOverridePolicyInterrupter(baseInterrupter, tokenManager, nil, opLister)
 	policyInterrupterManager.AddInterrupter(schema.GroupVersionKind{
 		Group:   policyv1alpha1.SchemeGroupVersion.Group,
 		Version: policyv1alpha1.SchemeGroupVersion.Version,
@@ -35,19 +47,19 @@ func test_fakePolicyInterrupterManager() (PolicyInterrupterManager, error) {
 		Group:   policyv1alpha1.SchemeGroupVersion.Group,
 		Version: policyv1alpha1.SchemeGroupVersion.Version,
 		Kind:    "ClusterOverridePolicy",
-	}, NewClusterOverridePolicyInterrupter(overridePolicyInterrupter, nil))
+	}, NewClusterOverridePolicyInterrupter(overridePolicyInterrupter, copLister))
 	// cvp
 	policyInterrupterManager.AddInterrupter(schema.GroupVersionKind{
 		Group:   policyv1alpha1.SchemeGroupVersion.Group,
 		Version: policyv1alpha1.SchemeGroupVersion.Version,
 		Kind:    "ClusterValidatePolicy",
-	}, NewClusterValidatePolicyInterrupter(baseInterrupter, tokenManager, nil, nil))
+	}, NewClusterValidatePolicyInterrupter(baseInterrupter, tokenManager, nil, cvpLister))
 
 	return policyInterrupterManager, nil
 }
 
 func Test_policyInterrupterImpl_OnValidating(t *testing.T) {
-	policyInterrupter, err := test_fakePolicyInterrupterManager()
+	policyInterrupter, err := test_fakePolicyInterrupterManager(t)
 	if err != nil {
 		t.Error(err)
 		return
@@ -149,6 +161,18 @@ validate: {
 			wantErr: false,
 		},
 		{
+			name: "1.3",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "OverridePolicy",
+				},
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "2",
 			args: args{
 				operation: admissionv1.Update,
@@ -222,6 +246,18 @@ validate: {
 			wantErr: true,
 		},
 		{
+			name: "2.3",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterOverridePolicy",
+				},
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "3",
 			args: args{
 				operation: admissionv1.Update,
@@ -288,10 +324,22 @@ validate: {
 			},
 			wantErr: true,
 		},
+		{
+			name: "3.3",
+			args: args{
+				operation: admissionv1.Delete,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+				},
+				},
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := policyInterrupter.OnValidating(tt.args.obj, tt.args.oldObj, admissionv1.Create); (err != nil) != tt.wantErr {
+			if err := policyInterrupter.OnValidating(tt.args.obj, tt.args.oldObj, tt.args.operation); (err != nil) != tt.wantErr {
 				t.Errorf("OnValidating() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -299,7 +347,7 @@ validate: {
 }
 
 func Test_policyInterrupterImpl_OnMutating(t *testing.T) {
-	policyInterrupter, err := test_fakePolicyInterrupterManager()
+	policyInterrupter, err := test_fakePolicyInterrupterManager(t)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1140,268 +1188,6 @@ validate: {
 			},
 			wantErr: false,
 		},
-		{
-			name: "4",
-			args: args{
-				operation: admissionv1.Create,
-				obj: &unstructured.Unstructured{Object: map[string]any{
-					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
-					"kind":       "ClusterValidatePolicy",
-					"spec": map[string]any{
-						"validateRules": []map[string]any{
-							{
-								"template": map[string]any{
-									"type": "pab",
-									"podAvailableBadge": map[string]any{
-										"maxUnavailable": "60%",
-									},
-								},
-							},
-						},
-					},
-				}},
-			},
-			want: []jsonpatchv2.JsonPatchOperation{
-				{
-					Operation: "replace",
-					Path:      "/spec/validateRules/0/template/podAvailableBadge/replicaReference",
-					Value: &policyv1alpha1.ReplicaResourceRefer{
-						From:               policyv1alpha1.FromOwnerReference,
-						TargetReplicaPath:  "/spec/replicas",
-						CurrentReplicaPath: "/status/replicas",
-					},
-				},
-				{
-					Operation: "replace",
-					Path:      "/spec/validateRules/0/renderedCue",
-					Value: `data:        _ @tag(data)
-object:      data.object
-oldObject:   data.oldObject
-otherObject: data.extraParams."otherObject"
-validate: {
-    if otherObject.spec.replicas != _|_ {
-        if otherObject.status.replicas != _|_ {
-            // target - target * 0.6 > current
-            if otherObject.spec.replicas-otherObject.spec.replicas*0.6 > otherObject.status.replicas-1 {
-                {
-                    valid:  false
-                    reason: "Cannot delete this pod, cause of hitting maxUnavailable(0.6)"
-                }
-            }
-        }
-    }
-}
-`,
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "4.1",
-			args: args{
-				operation: admissionv1.Delete,
-				obj: &unstructured.Unstructured{Object: map[string]any{
-					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
-					"kind":       "ClusterValidatePolicy",
-					"spec": map[string]any{
-						"validateRules": []map[string]any{
-							{
-								"template": map[string]any{
-									"type": "pab",
-									"podAvailableBadge": map[string]any{
-										"maxUnavailable": "60%",
-									},
-								},
-							},
-						},
-					},
-				}},
-			},
-			want:    nil,
-			wantErr: false,
-		},
-		{
-			name: "5",
-			args: args{
-				operation: admissionv1.Create,
-				obj: &unstructured.Unstructured{Object: map[string]any{
-					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
-					"kind":       "ClusterValidatePolicy",
-					"spec": map[string]any{
-						"validateRules": []map[string]any{
-							{
-								"template": map[string]any{
-									"type": "pab",
-									"podAvailableBadge": map[string]any{
-										"maxUnavailable": "60%",
-										"replicaReference": map[string]any{
-											"from":               "http",
-											"targetReplicaPath":  "body.target",
-											"currentReplicaPath": "body.origin",
-											"http": map[string]any{
-												"url": "https://xxx.com",
-												"auth": map[string]any{
-													"authUrl":  "https://xxx.com",
-													"username": "xx",
-													"password": "xx",
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				}},
-			},
-			want: []jsonpatchv2.JsonPatchOperation{
-				{
-					Operation: "replace",
-					Path:      "/spec/validateRules/0/renderedCue",
-					Value: `data:      _ @tag(data)
-object:    data.object
-oldObject: data.oldObject
-http:      data.extraParams."http"
-validate: {
-    if http.body.target != _|_ {
-        if http.body.origin != _|_ {
-            // target - target * 0.6 > current
-            if http.body.target-http.body.target*0.6 > http.body.origin-1 {
-                {
-                    valid:  false
-                    reason: "Cannot delete this pod, cause of hitting maxUnavailable(0.6)"
-                }
-            }
-        }
-    }
-}
-`,
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "5.1",
-			args: args{
-				operation: admissionv1.Delete,
-				obj: &unstructured.Unstructured{Object: map[string]any{
-					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
-					"kind":       "ClusterValidatePolicy",
-					"spec": map[string]any{
-						"validateRules": []map[string]any{
-							{
-								"template": map[string]any{
-									"type": "pab",
-									"podAvailableBadge": map[string]any{
-										"maxUnavailable": "60%",
-										"replicaReference": map[string]any{
-											"from":               "http",
-											"targetReplicaPath":  "body.target",
-											"currentReplicaPath": "body.origin",
-											"http": map[string]any{
-												"url": "https://xxx.com",
-												"auth": map[string]any{
-													"authUrl":  "https://xxx.com",
-													"username": "xx",
-													"password": "xx",
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				}},
-			},
-			want:    nil,
-			wantErr: false,
-		},
-		{
-			name: "5.2",
-			args: args{
-				operation: admissionv1.Update,
-				oldObj: &unstructured.Unstructured{Object: map[string]any{
-					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
-					"kind":       "ClusterValidatePolicy",
-					"spec": map[string]any{
-						"validateRules": []map[string]any{
-							{
-								"template": map[string]any{
-									"type": "pab",
-									"podAvailableBadge": map[string]any{
-										"maxUnavailable": "60%",
-										"replicaReference": map[string]any{
-											"from":               "http",
-											"targetReplicaPath":  "body.target",
-											"currentReplicaPath": "body.origin",
-											"http": map[string]any{
-												"url": "https://xxx.com",
-												"auth": map[string]any{
-													"authUrl":  "https://xxx.com",
-													"username": "xx",
-													"password": "xx",
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				}},
-				obj: &unstructured.Unstructured{Object: map[string]any{
-					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
-					"kind":       "ClusterValidatePolicy",
-					"spec": map[string]any{
-						"validateRules": []map[string]any{
-							{
-								"template": map[string]any{
-									"type": "pab",
-									"podAvailableBadge": map[string]any{
-										"maxUnavailable": "60%",
-									},
-								},
-							},
-						},
-					},
-				}},
-			},
-			want: []jsonpatchv2.JsonPatchOperation{
-				{
-					Operation: "replace",
-					Path:      "/spec/validateRules/0/template/podAvailableBadge/replicaReference",
-					Value: &policyv1alpha1.ReplicaResourceRefer{
-						From:               policyv1alpha1.FromOwnerReference,
-						TargetReplicaPath:  "/spec/replicas",
-						CurrentReplicaPath: "/status/replicas",
-					},
-				},
-				{
-					Operation: "replace",
-					Path:      "/spec/validateRules/0/renderedCue",
-					Value: `data:        _ @tag(data)
-object:      data.object
-oldObject:   data.oldObject
-otherObject: data.extraParams."otherObject"
-validate: {
-    if otherObject.spec.replicas != _|_ {
-        if otherObject.status.replicas != _|_ {
-            // target - target * 0.6 > current
-            if otherObject.spec.replicas-otherObject.spec.replicas*0.6 > otherObject.status.replicas-1 {
-                {
-                    valid:  false
-                    reason: "Cannot delete this pod, cause of hitting maxUnavailable(0.6)"
-                }
-            }
-        }
-    }
-}
-`,
-				},
-			},
-			wantErr: false,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1413,6 +1199,31 @@ validate: {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("OnMutating() got = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_policyInterrupterImpl_OnStartUp(t *testing.T) {
+	policyInterrupter, err := test_fakePolicyInterrupterManager(t)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	tests := []struct {
+		name    string
+		wantErr bool
+	}{
+		{
+			name:    "1",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := policyInterrupter.OnStartUp(); (err != nil) != tt.wantErr {
+				t.Errorf("OnStartUp() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
