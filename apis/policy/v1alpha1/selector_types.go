@@ -20,152 +20,87 @@ import (
 	"fmt"
 	"strings"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/selection"
 )
 
 type FieldSelector struct {
-	MatchFields []*MatchField `json:"matchFields,omitempty"`
+	// matchFields is a map of {key,value} pairs. A single {key,value} in the matchFields
+	// map is equivalent to an element of matchExpressions, whose key field is "key", the
+	// operator is "In", and the values array contains only "value".
+	// +optional
+	MatchFields map[string]string `json:"matchFields,omitempty"`
+	// matchExpressions is a list of fields selector requirements. The requirements are ANDed.
+	// +optional
+	MatchExpressions []*FieldSelectorRequirement `json:"matchExpressions,omitempty"`
 }
 
-type MatchField struct {
-	Field string `json:"key,omitempty"`
-	Value string `json:"value,omitempty"`
+type FieldSelectorRequirement struct {
+	// Field is the field key that the selector applies to.
+	// Must provide whole path of key, such as `metadata.annotations.uid`
+	Field string `json:"field"`
+	// operator represents a key's relationship to a set of values.
+	// Valid operators are In, NotIn, Exists and DoesNotExist.
+	Operator metav1.LabelSelectorOperator `json:"operator"`
+	// values is an array of string values. If the operator is In or NotIn,
+	// the values array must be non-empty. If the operator is Exists or DoesNotExist,
+	// the values array must be empty.
+	// +optional
+	Value []string `json:"value,omitempty"`
 }
 
-var (
-	_ fields.Selector = &FieldSelector{}
-	_ fields.Selector = &MatchField{}
-)
-
-func (m *MatchField) Matches(field fields.Fields) bool {
-	return field.Get(m.Field) == m.Value
-}
-
-func (m *MatchField) Empty() bool {
-	return false
-}
-
-func (m *MatchField) RequiresExactMatch(field string) (value string, found bool) {
-	if m.Field == field {
-		return m.Value, true
-	}
-
-	return "", false
-}
-
-func (m *MatchField) Transform(fn fields.TransformFunc) (fields.Selector, error) {
-	field, value, err := fn(m.Field, m.Value)
-	if err != nil {
-		return nil, err
-	}
-	if len(field) == 0 && len(value) == 0 {
-		return fields.Everything(), nil
-	}
-
-	return &MatchField{field, value}, nil
-}
-
-func (m *MatchField) Requirements() fields.Requirements {
-	return []fields.Requirement{{
-		Field:    m.Field,
-		Operator: selection.Equals,
-		Value:    m.Value,
-	}}
-}
-
-func (m *MatchField) String() string {
-	return fmt.Sprintf("%v=%v", m.Field, fields.EscapeValue(m.Value))
-}
-
-func (m *MatchField) DeepCopySelector() fields.Selector {
-	if m == nil {
-		return nil
-	}
-	out := new(MatchField)
-	*out = *m
-	return out
-}
-
-func (m *MatchField) MatchObject(obj *unstructured.Unstructured) (bool, error) {
-	v, found, err := unstructured.NestedString(obj.Object, strings.Split(m.Field, ".")...)
+func (r *FieldSelectorRequirement) MatchObject(obj *unstructured.Unstructured) (bool, error) {
+	v, found, err := unstructured.NestedString(obj.Object, strings.Split(r.Field, ".")...)
 	if err != nil {
 		return false, err
 	}
 
-	return found && v == m.Value, nil
-}
-
-func (f *FieldSelector) Matches(f2 fields.Fields) bool {
-	for _, matchField := range f.MatchFields {
-		if !matchField.Matches(f2) {
-			return false
+	switch r.Operator {
+	case metav1.LabelSelectorOpExists:
+		return found, nil
+	case metav1.LabelSelectorOpDoesNotExist:
+		return !found, nil
+	case metav1.LabelSelectorOpIn:
+		if !found {
+			return found, nil
 		}
-	}
 
-	return true
-}
-
-func (f *FieldSelector) Empty() bool {
-	return len(f.MatchFields) == 0
-}
-
-func (f *FieldSelector) RequiresExactMatch(field string) (value string, found bool) {
-	for i := range f.MatchFields {
-		if value, found = f.MatchFields[i].RequiresExactMatch(field); found {
-			return
+		for _, s := range r.Value {
+			if s == v {
+				return true, nil
+			}
 		}
-	}
 
-	return
-}
-
-func (f *FieldSelector) Transform(fn fields.TransformFunc) (fields.Selector, error) {
-	next := make([]*MatchField, 0, len(f.MatchFields))
-	for _, s := range f.MatchFields {
-		n, err := s.Transform(fn)
-		if err != nil {
-			return nil, err
+		return false, nil
+	case metav1.LabelSelectorOpNotIn:
+		var in bool
+		for _, s := range r.Value {
+			if s == v {
+				in = true
+				break
+			}
 		}
-		if !n.Empty() {
-			next = append(next, n.(*MatchField))
-		}
-	}
-	return &FieldSelector{next}, nil
-}
 
-func (f *FieldSelector) Requirements() fields.Requirements {
-	reqs := make([]fields.Requirement, 0, len(f.MatchFields))
-	for _, s := range f.MatchFields {
-		rs := s.Requirements()
-		reqs = append(reqs, rs...)
+		return !in, nil
+	default:
+		return false, fmt.Errorf("unknown operator:%v", r.Operator)
 	}
-	return reqs
-}
-
-func (f *FieldSelector) String() string {
-	var terms []string
-	for _, q := range f.MatchFields {
-		terms = append(terms, q.String())
-	}
-	return strings.Join(terms, ",")
-}
-
-func (f *FieldSelector) DeepCopySelector() fields.Selector {
-	if f == nil {
-		return nil
-	}
-	out := make([]*MatchField, len(f.MatchFields))
-	for i := range f.MatchFields {
-		out[i] = f.MatchFields[i].DeepCopySelector().(*MatchField)
-	}
-	return &FieldSelector{out}
 }
 
 func (f *FieldSelector) MatchObject(obj *unstructured.Unstructured) (bool, error) {
-	for i := range f.MatchFields {
-		match, err := f.MatchFields[i].MatchObject(obj)
+	for k, v := range f.MatchFields {
+		match, err := matchObj(obj, k, v)
+		if err != nil {
+			return false, err
+		}
+
+		if !match {
+			return match, nil
+		}
+	}
+
+	for i := range f.MatchExpressions {
+		match, err := f.MatchExpressions[i].MatchObject(obj)
 		if err != nil {
 			return false, err
 		}
@@ -176,4 +111,13 @@ func (f *FieldSelector) MatchObject(obj *unstructured.Unstructured) (bool, error
 	}
 
 	return true, nil
+}
+
+func matchObj(obj *unstructured.Unstructured, field, value string) (bool, error) {
+	v, found, err := unstructured.NestedString(obj.Object, strings.Split(field, ".")...)
+	if err != nil {
+		return false, err
+	}
+
+	return found && value == v, nil
 }

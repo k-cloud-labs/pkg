@@ -53,15 +53,43 @@ spec:
                       description: A field query over a set of resources. If name
                         is not empty, fieldSelector wil be ignored.
                       properties:
-                        matchFields:
+                        matchExpressions:
+                          description: matchExpressions is a list of fields selector
+                            requirements. The requirements are ANDed.
                           items:
                             properties:
-                              key:
+                              field:
+                                description: Field is the field key that the selector
+                                  applies to. Must provide whole path of key, such
+                                  as `metadata.annotations.uid`
+                                type: string
+                              operator:
+                                description: operator represents a key's relationship
+                                  to a set of values. Valid operators are In, NotIn,
+                                  Exists and DoesNotExist.
                                 type: string
                               value:
-                                type: string
+                                description: values is an array of string values.
+                                  If the operator is In or NotIn, the values array
+                                  must be non-empty. If the operator is Exists or
+                                  DoesNotExist, the values array must be empty.
+                                items:
+                                  type: string
+                                type: array
+                            required:
+                            - field
+                            - operator
                             type: object
                           type: array
+                        matchFields:
+                          additionalProperties:
+                            type: string
+                          description: matchFields is a map of {key,value} pairs.
+                            A single {key,value} in the matchFields map is equivalent
+                            to an element of matchExpressions, whose key field is
+                            "key", the operator is "In", and the values array contains
+                            only "value".
+                          type: object
                       type: object
                     kind:
                       description: Kind represents the Kind of the target resources.
@@ -318,15 +346,49 @@ spec:
                                         If name is not empty, fieldSelector wil be
                                         ignored.
                                       properties:
-                                        matchFields:
+                                        matchExpressions:
+                                          description: matchExpressions is a list
+                                            of fields selector requirements. The requirements
+                                            are ANDed.
                                           items:
                                             properties:
-                                              key:
+                                              field:
+                                                description: Field is the field key
+                                                  that the selector applies to. Must
+                                                  provide whole path of key, such
+                                                  as `metadata.annotations.uid`
+                                                type: string
+                                              operator:
+                                                description: operator represents a
+                                                  key's relationship to a set of values.
+                                                  Valid operators are In, NotIn, Exists
+                                                  and DoesNotExist.
                                                 type: string
                                               value:
-                                                type: string
+                                                description: values is an array of
+                                                  string values. If the operator is
+                                                  In or NotIn, the values array must
+                                                  be non-empty. If the operator is
+                                                  Exists or DoesNotExist, the values
+                                                  array must be empty.
+                                                items:
+                                                  type: string
+                                                type: array
+                                            required:
+                                            - field
+                                            - operator
                                             type: object
                                           type: array
+                                        matchFields:
+                                          additionalProperties:
+                                            type: string
+                                          description: matchFields is a map of {key,value}
+                                            pairs. A single {key,value} in the matchFields
+                                            map is equivalent to an element of matchExpressions,
+                                            whose key field is "key", the operator
+                                            is "In", and the values array contains
+                                            only "value".
+                                          type: object
                                       type: object
                                     kind:
                                       description: Kind represents the Kind of the
@@ -595,15 +657,49 @@ spec:
                                         If name is not empty, fieldSelector wil be
                                         ignored.
                                       properties:
-                                        matchFields:
+                                        matchExpressions:
+                                          description: matchExpressions is a list
+                                            of fields selector requirements. The requirements
+                                            are ANDed.
                                           items:
                                             properties:
-                                              key:
+                                              field:
+                                                description: Field is the field key
+                                                  that the selector applies to. Must
+                                                  provide whole path of key, such
+                                                  as `metadata.annotations.uid`
+                                                type: string
+                                              operator:
+                                                description: operator represents a
+                                                  key's relationship to a set of values.
+                                                  Valid operators are In, NotIn, Exists
+                                                  and DoesNotExist.
                                                 type: string
                                               value:
-                                                type: string
+                                                description: values is an array of
+                                                  string values. If the operator is
+                                                  In or NotIn, the values array must
+                                                  be non-empty. If the operator is
+                                                  Exists or DoesNotExist, the values
+                                                  array must be empty.
+                                                items:
+                                                  type: string
+                                                type: array
+                                            required:
+                                            - field
+                                            - operator
                                             type: object
                                           type: array
+                                        matchFields:
+                                          additionalProperties:
+                                            type: string
+                                          description: matchFields is a map of {key,value}
+                                            pairs. A single {key,value} in the matchFields
+                                            map is equivalent to an element of matchExpressions,
+                                            whose key field is "key", the operator
+                                            is "In", and the values array contains
+                                            only "value".
+                                          type: object
                                       type: object
                                     kind:
                                       description: Kind represents the Kind of the
