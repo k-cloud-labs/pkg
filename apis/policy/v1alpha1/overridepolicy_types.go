@@ -74,6 +74,11 @@ type ResourceSelector struct {
 	// If name is not empty, labelSelector will be ignored.
 	// +optional
 	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
+
+	// A field query over a set of resources.
+	// If name is not empty, fieldSelector wil be ignored.
+	// +optional
+	FieldSelector *FieldSelector `json:"fieldSelector,omitempty"`
 }
 
 // Overriders offers various alternatives to represent the override rules.

@@ -4,6 +4,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/klog/v2"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 )
@@ -26,30 +27,54 @@ func ResourceMatches(resource *unstructured.Unstructured, rs policyv1alpha1.Reso
 		return false
 	}
 
-	// match rules:
-	// case ResourceSelector.name   ResourceSelector.labelSelector   Rule
-	// 1    not-empty               not-empty                        match name only and ignore selector
-	// 2    not-empty               empty                            match name only
-	// 3    empty                   not-empty                        match selector only
-	// 4    empty                   empty                            match all
+	/*
+		* match rules:
+		* (any means no matter if it's empty or not)
+		| name | label selector | field selector | result |
+		|:---- |:----          |:----          |:----   |
+		| not empty | any       | any       | match name only |
+		| empty     | empty     | empty     | match all |
+		| empty     | not empty | empty     | match labels only |
+		| empty     | empty     | not empty | match fields only |
+		| empty     | not empty | not empty | match both labels and fields |
+	*/
 
-	// case 1, 2: name not empty, don't need to consult selector.
+	// name not empty, don't need to consult selector.
 	if len(rs.Name) > 0 {
 		return rs.Name == resource.GetName()
 	}
 
-	// case 4: short path, both name and selector empty, matches all
-	if rs.LabelSelector == nil {
+	// all empty, matches all
+	if rs.LabelSelector == nil && rs.FieldSelector == nil {
 		return true
 	}
 
-	// case 3: matches with selector
-	var s labels.Selector
-	var err error
-	if s, err = metav1.LabelSelectorAsSelector(rs.LabelSelector); err != nil {
-		// should not happen because all resource selector should be fully validated by webhook.
-		return false
+	// matches with field selector
+	if rs.FieldSelector != nil {
+		match, err := rs.FieldSelector.MatchObject(resource)
+		if err != nil {
+			klog.ErrorS(err, "match fields failed")
+			return false
+		}
+
+		if !match {
+			// return false if not match
+			return false
+		}
 	}
 
-	return s.Matches(labels.Set(resource.GetLabels()))
+	// matches with selector
+	if rs.LabelSelector != nil {
+		var s labels.Selector
+		var err error
+		if s, err = metav1.LabelSelectorAsSelector(rs.LabelSelector); err != nil {
+			// should not happen because all resource selector should be fully validated by webhook.
+			klog.ErrorS(err, "match labels failed")
+			return false
+		}
+
+		return s.Matches(labels.Set(resource.GetLabels()))
+	}
+
+	return true
 }

@@ -1370,6 +1370,21 @@ spec:
                                       description: APIVersion represents the API version
                                         of the target resources.
                                       type: string
+                                    fieldSelector:
+                                      description: A field query over a set of resources.
+                                        If name is not empty, fieldSelector wil be
+                                        ignored.
+                                      properties:
+                                        matchFields:
+                                          items:
+                                            properties:
+                                              key:
+                                                type: string
+                                              value:
+                                                type: string
+                                            type: object
+                                          type: array
+                                      type: object
                                     kind:
                                       description: Kind represents the Kind of the
                                         target resources.
@@ -1478,6 +1493,20 @@ spec:
                       description: APIVersion represents the API version of the target
                         resources.
                       type: string
+                    fieldSelector:
+                      description: A field query over a set of resources. If name
+                        is not empty, fieldSelector wil be ignored.
+                      properties:
+                        matchFields:
+                          items:
+                            properties:
+                              key:
+                                type: string
+                              value:
+                                type: string
+                            type: object
+                          type: array
+                      type: object
                     kind:
                       description: Kind represents the Kind of the target resources.
                       type: string
