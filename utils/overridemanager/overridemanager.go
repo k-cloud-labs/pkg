@@ -2,6 +2,7 @@ package overridemanager
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -29,7 +30,7 @@ type OverrideManager interface {
 	// For namespaced scoped resource, apply order is:
 	// - First apply ClusterOverridePolicy;
 	// - Then apply OverridePolicy;
-	ApplyOverridePolicies(rawObj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (appliedCOPs *AppliedOverrides, appliedOPs *AppliedOverrides, err error)
+	ApplyOverridePolicies(ctx context.Context, rawObj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (appliedCOPs *AppliedOverrides, appliedOPs *AppliedOverrides, err error)
 }
 
 // GeneralOverridePolicy is an abstract object of ClusterOverridePolicy and OverridePolicy
@@ -69,14 +70,14 @@ func NewOverrideManager(dynamicClient dynamiclister.DynamicResourceLister, copLi
 	}
 }
 
-func (o *overrideManagerImpl) ApplyOverridePolicies(rawObj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, *AppliedOverrides, error) {
+func (o *overrideManagerImpl) ApplyOverridePolicies(ctx context.Context, rawObj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, *AppliedOverrides, error) {
 	var (
 		appliedCOPs *AppliedOverrides
 		appliedOPs  *AppliedOverrides
 		err         error
 	)
 
-	appliedCOPs, err = o.applyClusterOverridePolicies(rawObj, oldObj, operation)
+	appliedCOPs, err = o.applyClusterOverridePolicies(ctx, rawObj, oldObj, operation)
 	if err != nil {
 		klog.ErrorS(err, "Failed to apply cluster override policies.")
 		return nil, nil, err
@@ -84,7 +85,7 @@ func (o *overrideManagerImpl) ApplyOverridePolicies(rawObj, oldObj *unstructured
 
 	if rawObj.GetNamespace() != "" {
 		// Apply namespace scoped override policies
-		appliedOPs, err = o.applyOverridePolicies(rawObj, oldObj, operation)
+		appliedOPs, err = o.applyOverridePolicies(ctx, rawObj, oldObj, operation)
 		if err != nil {
 			klog.ErrorS(err, "Failed to apply override policies.")
 			return nil, nil, err
@@ -94,8 +95,11 @@ func (o *overrideManagerImpl) ApplyOverridePolicies(rawObj, oldObj *unstructured
 	return appliedCOPs, appliedOPs, nil
 }
 
-func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, error) {
+func (o *overrideManagerImpl) applyClusterOverridePolicies(ctx context.Context, rawObj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, error) {
+	defer traceStep(ctx, "applyClusterOverridePolicies finished")
+	traceStep(ctx, "About to list cop")
 	cops, err := o.copLister.List(labels.Everything())
+	traceStep(ctx, "List cop done")
 	if err != nil {
 		klog.ErrorS(err, "Failed to list cluster override policies.", "resource", klog.KObj(rawObj), "operation", operation)
 		return nil, err
@@ -120,7 +124,7 @@ func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj, oldObj *unstr
 	appliedOverrides := &AppliedOverrides{}
 	for _, p := range matchingPolicyOverriders {
 		metrics.OverridePolicyMatched(p.name, rawObj.GroupVersionKind())
-		if err := o.applyPolicyOverriders(rawObj, oldObj, p); err != nil {
+		if err := o.applyPolicyOverriders(ctx, rawObj, oldObj, p); err != nil {
 			klog.ErrorS(err, "Failed to apply cluster overriders.", "clusteroverridepolicy", p.name, "resource", klog.KObj(rawObj), "operation", operation)
 			return nil, err
 		}
@@ -131,8 +135,11 @@ func (o *overrideManagerImpl) applyClusterOverridePolicies(rawObj, oldObj *unstr
 	return appliedOverrides, nil
 }
 
-func (o *overrideManagerImpl) applyOverridePolicies(rawObj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, error) {
+func (o *overrideManagerImpl) applyOverridePolicies(ctx context.Context, rawObj, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*AppliedOverrides, error) {
+	defer traceStep(ctx, "applyOverridePolicies finished")
+	traceStep(ctx, "About to list op")
 	ops, err := o.opLister.List(labels.Everything())
+	traceStep(ctx, "List op done")
 	if err != nil {
 		klog.ErrorS(err, "Failed to list override policies.", "namespace", rawObj.GetNamespace(), "resource", klog.KObj(rawObj), "operation", operation)
 		return nil, err
@@ -157,7 +164,7 @@ func (o *overrideManagerImpl) applyOverridePolicies(rawObj, oldObj *unstructured
 	appliedOverriders := &AppliedOverrides{}
 	for _, p := range matchingPolicyOverriders {
 		metrics.OverridePolicyMatched(p.namespace+"/"+p.name, rawObj.GroupVersionKind())
-		if err := o.applyPolicyOverriders(rawObj, oldObj, p); err != nil {
+		if err := o.applyPolicyOverriders(ctx, rawObj, oldObj, p); err != nil {
 			klog.ErrorS(err, "Failed to apply overriders.",
 				"overridepolicy", fmt.Sprintf("%s/%s", p.namespace, p.name), "resource", klog.KObj(rawObj), "operation", operation)
 			return nil, fmt.Errorf("appling policy(%v/%v) err=%v", p.namespace, p.name, err)
@@ -205,13 +212,17 @@ func (o *overrideManagerImpl) getOverridersFromOverridePolicies(policies []Gener
 }
 
 // applyPolicyOverriders applies OverridePolicy/ClusterOverridePolicy overriders to target object
-func (o *overrideManagerImpl) applyPolicyOverriders(rawObj, oldObj *unstructured.Unstructured, p policyOverriders) error {
+func (o *overrideManagerImpl) applyPolicyOverriders(ctx context.Context, rawObj, oldObj *unstructured.Unstructured, p policyOverriders) error {
+	defer traceStep(ctx, "applyPolicyOverriders finished")
+	traceStep(ctx, "Start applyPolicyOverriders")
 	policyName := p.name
 	if p.namespace != "" {
 		policyName = p.namespace + "/" + p.name
 	}
 	if p.overriders.Template != nil && p.overriders.RenderedCue != "" {
+		traceStep(ctx, "About to BuildCueParamsViaOverridePolicy")
 		cp, err := cue.BuildCueParamsViaOverridePolicy(o.dynamicLister, rawObj, p.overriders.Template)
+		traceStep(ctx, "BuildCueParamsViaOverridePolicy done")
 		if err != nil {
 			metrics.PolicyGotError(policyName, rawObj.GroupVersionKind(), metrics.ErrTypePrepareCueParams)
 			return fmt.Errorf("BuildCueParamsViaOverridePolicy error=%w", err)
@@ -228,7 +239,9 @@ func (o *overrideManagerImpl) applyPolicyOverriders(rawObj, oldObj *unstructured
 			},
 		}
 
+		traceStep(ctx, "About to execute template cue")
 		patches, err := executeCueV2(p.overriders.RenderedCue, params)
+		traceStep(ctx, "execute template cue done")
 		if err != nil {
 			metrics.PolicyGotError(policyName, rawObj.GroupVersionKind(), metrics.ErrorTypeCueExecute)
 			return err
@@ -243,7 +256,9 @@ func (o *overrideManagerImpl) applyPolicyOverriders(rawObj, oldObj *unstructured
 		}
 	}
 	if p.overriders.Cue != "" {
+		traceStep(ctx, "About to execute custom cue")
 		patches, err := executeCue(rawObj, p.overriders.Cue)
+		traceStep(ctx, "execute custom cue done")
 		if err != nil {
 			metrics.PolicyGotError(policyName, rawObj.GroupVersionKind(), metrics.ErrorTypeCueExecute)
 			return err
@@ -353,4 +368,13 @@ func executeCue(rawObj *unstructured.Unstructured, template string) (*[]override
 	}
 
 	return &result, nil
+}
+
+func traceStep(ctx context.Context, msg string) {
+	trace := utils.TraceFromContext(ctx)
+	if trace == nil {
+		return
+	}
+
+	trace.Step(msg)
 }

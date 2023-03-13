@@ -1,6 +1,7 @@
 package overridemanager
 
 import (
+	"context"
 	"flag"
 	"reflect"
 	"testing"
@@ -392,7 +393,7 @@ patches: [
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if cops, ops, err := m.ApplyOverridePolicies(tt.resource, tt.oldResource, tt.operation); !reflect.DeepEqual(cops, tt.wantedCOPs) || !reflect.DeepEqual(ops, tt.wantedOPs) ||
+			if cops, ops, err := m.ApplyOverridePolicies(context.Background(), tt.resource, tt.oldResource, tt.operation); !reflect.DeepEqual(cops, tt.wantedCOPs) || !reflect.DeepEqual(ops, tt.wantedOPs) ||
 				!reflect.DeepEqual(tt.resource.GetAnnotations(), tt.wantedAnnotations) || !reflect.DeepEqual(err, tt.wantedErr) {
 				t.Errorf("ApplyOverridePolicies(), cops= %v\n ops=%v\n, err=%v\n, want cops= %v\n ops=%v\n, err=%v", cops, ops, err, tt.wantedCOPs, tt.wantedOPs, tt.wantedErr)
 			}

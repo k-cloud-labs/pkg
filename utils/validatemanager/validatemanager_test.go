@@ -1,6 +1,7 @@
 package validatemanager
 
 import (
+	"context"
 	"flag"
 	"reflect"
 	"testing"
@@ -148,7 +149,7 @@ validate: {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := m.ApplyValidatePolicies(tt.object, tt.oldObject, tt.operation)
+			result, err := m.ApplyValidatePolicies(context.Background(), tt.object, tt.oldObject, tt.operation)
 			if !reflect.DeepEqual(result, tt.wantedResult) || !reflect.DeepEqual(err, tt.wantedErr) {
 				t.Errorf("ApplyValidatePolicies() = %v, %v want %v, %v", result, err, tt.wantedResult, tt.wantedErr)
 			}

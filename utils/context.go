@@ -1,6 +1,10 @@
 package utils
 
-import "context"
+import (
+	"context"
+
+	utiltrace "k8s.io/utils/trace"
+)
 
 // ContextForChannel derives a child context from a parent channel.
 //
@@ -19,4 +23,24 @@ func ContextForChannel(parentCh <-chan struct{}) (context.Context, context.Cance
 		}
 	}()
 	return ctx, cancel
+}
+
+type traceCtxKey struct{}
+
+// ContextWithTrace return a new context with trace as value.
+func ContextWithTrace(ctx context.Context, trace *utiltrace.Trace) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	return context.WithValue(ctx, traceCtxKey{}, trace)
+}
+
+func TraceFromContext(ctx context.Context) *utiltrace.Trace {
+	v, ok := ctx.Value(traceCtxKey{}).(*utiltrace.Trace)
+	if ok {
+		return v
+	}
+
+	return nil
 }
