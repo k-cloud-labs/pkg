@@ -1013,6 +1013,58 @@ validate: {
 			wantErr: false,
 		},
 		{
+			name: "3.0",
+			args: args{
+				operation: admissionv1.Create,
+				obj: &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "policy.kcloudlabs.io/v1alpha1",
+					"kind":       "ClusterValidatePolicy",
+					"spec": map[string]any{
+						"validateRules": []map[string]any{
+							{
+								"template": map[string]any{
+									"type": "condition",
+									"condition": map[string]any{
+										"message":    "forbidden",
+										"cond":       "NotIn",
+										"affectMode": "reject",
+										"dataRef": map[string]any{
+											"from": "current",
+											"path": "/spec/containers/0/image",
+										},
+										"value": map[string]any{
+											"stringSlice": []string{"fake-image", "fake-image-v2"},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			want: []jsonpatchv2.JsonPatchOperation{
+				{
+					Operation: "replace",
+					Path:      "/spec/validateRules/0/renderedCue",
+					Value: `import "list"
+
+data:      _ @tag(data)
+object:    data.object
+oldObject: data.oldObject
+validate: {
+    if object.spec.containers[0].image != _|_ {
+        if !list.Contains(["fake-image", "fake-image-v2"], object.spec.containers[0].image) {
+            valid:  false
+            reason: "forbidden"
+        }
+    }
+}
+`,
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "3.1",
 			args: args{
 				operation: admissionv1.Delete,

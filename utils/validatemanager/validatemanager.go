@@ -2,6 +2,7 @@ package validatemanager
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -23,7 +24,7 @@ import (
 // ValidateManager managers validate policies for operation
 type ValidateManager interface {
 	// ApplyValidatePolicies validate the object if one or more matched validate policy exist.
-	ApplyValidatePolicies(obj *unstructured.Unstructured, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*ValidateResult, error)
+	ApplyValidatePolicies(ctx context.Context, obj *unstructured.Unstructured, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*ValidateResult, error)
 }
 
 type validateManagerImpl struct {
@@ -43,8 +44,11 @@ func NewValidateManager(dynamicClient dynamiclister.DynamicResourceLister, cvpLi
 	}
 }
 
-func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstructured, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*ValidateResult, error) {
+func (m *validateManagerImpl) ApplyValidatePolicies(ctx context.Context, rawObj *unstructured.Unstructured, oldObj *unstructured.Unstructured, operation admissionv1.Operation) (*ValidateResult, error) {
+	defer traceStep(ctx, "ApplyValidatePolicies finished")
+	traceStep(ctx, "About to list cvp")
 	cvps, err := m.cvpLister.List(labels.Everything())
+	traceStep(ctx, "List cvp done")
 	if err != nil {
 		klog.ErrorS(err, "Failed to list validate policies.", "resource", klog.KObj(rawObj), "operation", operation)
 		return nil, err
@@ -58,7 +62,7 @@ func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstruc
 	}
 
 	for _, cvp := range cvps {
-		result, err := m.applyValidatePolicy(cvp, rawObj, oldObj, operation)
+		result, err := m.applyValidatePolicy(ctx, cvp, rawObj, oldObj, operation)
 		if err != nil {
 			klog.ErrorS(err, "Failed to applyValidatePolicy.",
 				"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
@@ -75,7 +79,7 @@ func (m *validateManagerImpl) ApplyValidatePolicies(rawObj *unstructured.Unstruc
 	}, nil
 }
 
-func (m *validateManagerImpl) applyValidatePolicy(cvp *policyv1alpha1.ClusterValidatePolicy, rawObj, oldObj *unstructured.Unstructured,
+func (m *validateManagerImpl) applyValidatePolicy(ctx context.Context, cvp *policyv1alpha1.ClusterValidatePolicy, rawObj, oldObj *unstructured.Unstructured,
 	operation admissionv1.Operation) (*ValidateResult, error) {
 	if len(cvp.Spec.ResourceSelectors) > 0 && !utils.ResourceMatchSelectors(rawObj, cvp.Spec.ResourceSelectors...) {
 		//no matched
@@ -100,7 +104,9 @@ func (m *validateManagerImpl) applyValidatePolicy(cvp *policyv1alpha1.ClusterVal
 				OldObject: oldObj,
 			}
 
+			traceStep(ctx, "Before execute template cue")
 			result, err := m.executeTemplate(params, &rule, cvp.Name)
+			traceStep(ctx, "After execute template cue")
 			if err != nil {
 				klog.ErrorS(err, "Failed to execute rendered cue.",
 					"validatepolicy", cvp.Name, "resource", klog.KObj(rawObj), "operation", operation)
@@ -118,7 +124,9 @@ func (m *validateManagerImpl) applyValidatePolicy(cvp *policyv1alpha1.ClusterVal
 		}
 
 		if rule.Cue != "" {
+			traceStep(ctx, "Before execute normal cue")
 			result, err := executeCue(rawObj, oldObj, rule.Cue)
+			traceStep(ctx, "After execute normal cue")
 			if err != nil {
 				metrics.PolicyGotError(rawObj.GetName(), rawObj.GroupVersionKind(), metrics.ErrorTypeCueExecute)
 				klog.ErrorS(err, "Failed to apply validate policy.",
@@ -238,4 +246,13 @@ func getPodPhase(obj *unstructured.Unstructured) corev1.PodPhase {
 	}
 
 	return corev1.PodPhase(val)
+}
+
+func traceStep(ctx context.Context, msg string) {
+	trace := utils.TraceFromContext(ctx)
+	if trace == nil {
+		return
+	}
+
+	trace.Step(msg)
 }
