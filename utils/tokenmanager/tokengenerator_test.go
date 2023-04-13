@@ -48,7 +48,7 @@ func TestNewTokenGenerator(t *testing.T) {
 		{
 			name: "normal",
 			args: args{
-				authUrl:       "https://auth.shopee.io/auth",
+				authUrl:       "https://auth.xxx.io/auth",
 				username:      "kinitiras",
 				password:      "****",
 				defaultExpire: time.Hour,
