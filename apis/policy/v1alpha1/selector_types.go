@@ -50,7 +50,7 @@ type FieldSelectorRequirement struct {
 }
 
 func (r *FieldSelectorRequirement) MatchObject(obj *unstructured.Unstructured) (bool, error) {
-	v, found, err := unstructured.NestedString(obj.Object, strings.Split(r.Field, ".")...)
+	v, found, err := fetchObjValue(obj, r.Field)
 	if err != nil {
 		return false, err
 	}
@@ -114,10 +114,18 @@ func (f *FieldSelector) MatchObject(obj *unstructured.Unstructured) (bool, error
 }
 
 func matchObj(obj *unstructured.Unstructured, field, value string) (bool, error) {
-	v, found, err := unstructured.NestedString(obj.Object, strings.Split(field, ".")...)
+	v, found, err := fetchObjValue(obj, field)
 	if err != nil {
 		return false, err
 	}
 
 	return found && value == v, nil
+}
+
+func fetchObjValue(obj *unstructured.Unstructured, field string) (string, bool, error) {
+	if index := strings.Index(field, ".annotations."); index != -1 {
+		return unstructured.NestedString(obj.Object, append(strings.Split(field[0:index], "."), "annotations", field[index+13:])...)
+	} else {
+		return unstructured.NestedString(obj.Object, strings.Split(field, ".")...)
+	}
 }

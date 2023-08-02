@@ -22,8 +22,8 @@ func newObjectForSelector() *unstructured.Unstructured {
 					"l2": "v2",
 				},
 				"annotations": map[string]interface{}{
-					"a1": "v1",
-					"a2": "v2",
+					"a1.b1/c1": "v1",
+					"a2.b2/c2": "v2",
 				},
 			},
 			"spec": map[string]interface{}{
@@ -168,7 +168,7 @@ func TestResourceMatchSelectors(t *testing.T) {
 						Kind:       "Pod",
 						FieldSelector: &policyv1alpha1.FieldSelector{
 							MatchFields: map[string]string{
-								"metadata.annotations.a1": "v1",
+								"metadata.annotations.a1.b1/c1": "v1",
 							},
 						},
 					},
@@ -187,7 +187,7 @@ func TestResourceMatchSelectors(t *testing.T) {
 						FieldSelector: &policyv1alpha1.FieldSelector{
 							MatchExpressions: []*policyv1alpha1.FieldSelectorRequirement{
 								{
-									Field:    "metadata.annotations.a1",
+									Field:    "metadata.annotations.a1.b1/c1",
 									Operator: metav1.LabelSelectorOpExists,
 								},
 							},
@@ -229,7 +229,7 @@ func TestResourceMatchSelectors(t *testing.T) {
 						FieldSelector: &policyv1alpha1.FieldSelector{
 							MatchExpressions: []*policyv1alpha1.FieldSelectorRequirement{
 								{
-									Field:    "metadata.annotations.a1",
+									Field:    "metadata.annotations.a1.b1/c1",
 									Operator: metav1.LabelSelectorOpIn,
 									Value:    []string{"v1", "v2", "v3"},
 								},
@@ -251,7 +251,7 @@ func TestResourceMatchSelectors(t *testing.T) {
 						FieldSelector: &policyv1alpha1.FieldSelector{
 							MatchExpressions: []*policyv1alpha1.FieldSelectorRequirement{
 								{
-									Field:    "metadata.annotations.a1",
+									Field:    "metadata.annotations.a1.b1/c1",
 									Operator: metav1.LabelSelectorOpNotIn,
 									Value:    []string{"v4", "v5", "v6"},
 								},
@@ -273,7 +273,7 @@ func TestResourceMatchSelectors(t *testing.T) {
 						FieldSelector: &policyv1alpha1.FieldSelector{
 							MatchExpressions: []*policyv1alpha1.FieldSelectorRequirement{
 								{
-									Field:    "metadata.annotations.a1",
+									Field:    "metadata.annotations.a1.b1/c1",
 									Operator: "!=", // not support
 									Value:    []string{"v4"},
 								},
