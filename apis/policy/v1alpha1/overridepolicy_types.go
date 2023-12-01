@@ -87,6 +87,7 @@ type ResourceSelector struct {
 // - RenderCue
 // - Cue
 // - Plaintext
+// - Origin
 type Overriders struct {
 	// Plaintext represents override rules defined with plaintext overriders.
 	// +optional
@@ -106,6 +107,9 @@ type Overriders struct {
 	// Don't modify the value of this field, modify Rules instead of.
 	// +optional
 	RenderedCue string `json:"renderedCue,omitempty"`
+
+	// Origin represents override rule defined by K8s origin field.
+	Origin []OverrideRuleOrigin `json:"origin,omitempty"`
 }
 
 // OverrideRuleType is definition for type of single override rule template
@@ -156,6 +160,112 @@ const (
 	// FromHTTP - read data from http response
 	FromHTTP ValueRefFrom = "http"
 )
+
+// OverrideRuleOriginType is the definition type of most fields from k8s
+// +kubebuilder:validation:Enum=annotations;labels;nodeSelector;hostNetwork;schedulerName;resourceRequirements;resourceOversell;affinity;tolerations;topologySpreadConstraints
+type OverrideRuleOriginType string
+
+const (
+	// OverrideRuleOriginTypeAnnotations - `annotations`
+	OverrideRuleOriginTypeAnnotations OverrideRuleOriginType = "annotations"
+	// OverrideRuleOriginLabels - `labels`
+	OverrideRuleOriginLabels OverrideRuleOriginType = "labels"
+	// OverrideRuleOriginNodeSelector - `nodeSelector`
+	OverrideRuleOriginNodeSelector OverrideRuleOriginType = "nodeSelector"
+	// OverrideRuleOriginHostNetwork - `hostNetwork`
+	OverrideRuleOriginHostNetwork OverrideRuleOriginType = "hostNetwork"
+	// OverrideRuleOriginSchedulerName - `schedulerName`
+	OverrideRuleOriginSchedulerName OverrideRuleOriginType = "schedulerName"
+	// OverrideRuleOriginResourceRequirements - `resourceRequirements`
+	OverrideRuleOriginResourceRequirements OverrideRuleOriginType = "resourceRequirements"
+	// OverrideRuleOriginResourceOversell - `resourceOversell`
+	OverrideRuleOriginResourceOversell OverrideRuleOriginType = "resourceOversell"
+	// OverrideRuleOriginAffinity - `affinity`
+	OverrideRuleOriginAffinity OverrideRuleOriginType = "affinity"
+	// OverrideRuleOriginTolerations - `tolerations`
+	OverrideRuleOriginTolerations OverrideRuleOriginType = "tolerations"
+	// OverrideRuleOriginTopologySpreadConstraints - `topologySpreadConstraints`
+	OverrideRuleOriginTopologySpreadConstraints OverrideRuleOriginType = "topologySpreadConstraints"
+)
+
+type ResourceType string
+
+const (
+	RequestResourceType ResourceType = "requests"
+	LimitResourceType   ResourceType = "limits"
+)
+
+// OverrideRuleOrigin represents a set of rule definition
+type OverrideRuleOrigin struct {
+	// Type represents current rule operate field type.
+	// +kubebuilder:validation:Enum=annotations;labels;nodeSelector;hostNetwork;schedulerName;resourceRequirements;resourceOversell;affinity;tolerations;topologySpreadConstraints
+	// +required
+	Type OverrideRuleOriginType `json:"type,omitempty"`
+	// Operation represents current operation type.
+	// +kubebuilder:validation:Enum=add;replace;remove
+	// +required
+	Operation OverriderOperator `json:"operation,omitempty"`
+	// Replace represents whether full replacement is required
+	// +optional
+	Replace bool `json:"replace,omitempty"`
+	// ResourceOversellRule represents the oversold ratio of a resource
+	// +optional
+	ResourceOversell map[ResourceType]map[string]Float64 `json:"resourcesOversell,omitempty"`
+	// ContainerCount represents which container it is, the first container is 0.
+	// Only affects ResourceRequirements and ResourceOversell
+	// Note: For the same 'OverrideRuleOrigin', only one of 'ResourceRequirements' and 'ResourceOversell' can be present.
+	// +optional
+	ContainerCount int `json:"containerCount,omitempty"`
+	// ResourceRequirements represents the oversold ratio of a resource
+	// +optional
+	ResourceRequirements v1.ResourceRequirements `json:"resourceRequirements,omitempty"`
+	// If specified, the pod's tolerations.
+	// +optional
+	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
+	// If specified, the pod's scheduling constraints
+	// +optional
+	Affinity *v1.Affinity `json:"affinity,omitempty"`
+	// TopologySpreadConstraints describes how a group of pods ought to spread across topology
+	// domains. Scheduler will schedule pods in a way which abides by the constraints.
+	// This field is alpha-level and is only honored by clusters that enables the EvenPodsSpread
+	// feature.
+	// All topologySpreadConstraints are ANDed.
+	// +optional
+	// +patchMergeKey=topologyKey
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=topologyKey
+	// +listMapKey=whenUnsatisfiable
+	TopologySpreadConstraints []v1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+	// If specified, the pod will be dispatched by specified scheduler.
+	// If not specified, the pod will be dispatched by default scheduler.
+	// +optional
+	SchedulerName string `json:"schedulerName,omitempty"`
+	// Host networking requested for this pod. Use the host's network namespace.
+	// If this option is set, the ports that will be used must be specified.
+	// Default to false.
+	// +k8s:conversion-gen=false
+	// +optional
+	HostNetwork bool `json:"hostNetwork,omitempty"`
+	// NodeSelector is a selector which must be true for the pod to fit on a node.
+	// Selector which must match a node's labels for the pod to be scheduled on that node.
+	// More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+	// +optional
+	// +mapType=atomic
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// Annotations is an unstructured key value map stored with a resource that may be
+	// set by external tools to store and retrieve arbitrary metadata. They are not
+	// queryable and should be preserved when modifying objects.
+	// More info: http://kubernetes.io/docs/user-guide/annotations
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+	// Map of string keys and values that can be used to organize and categorize
+	// (scope and select) objects. May match selectors of replication controllers
+	// and services.
+	// More info: http://kubernetes.io/docs/user-guide/labels
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+}
 
 // OverrideRuleTemplate represents a single template of rule definition
 type OverrideRuleTemplate struct {

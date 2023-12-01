@@ -5,14 +5,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	jsonpatchv2 "gomodules.xyz/jsonpatch/v2"
 	admissionv1 "k8s.io/api/admission/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/validation"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	validationutil "k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -112,8 +117,29 @@ func NewOverridePolicyInterrupter(interrupter PolicyInterrupter, tm tokenmanager
 
 func (o *overridePolicyInterrupter) validateOverridePolicy(objSpec *policyv1alpha1.OverridePolicySpec) error {
 	for _, overrideRule := range objSpec.OverrideRules {
+		if validateOverrideRuleOrigin(overrideRule.Overriders.Origin) {
+			return fmt.Errorf("cop is invalid: in the same cop, there cannot be a unified containerCount in OverrideRuleOriginResourceRequirements and OverrideRuleOriginResourceOversell")
+		}
+
+		if err := o.validateOverridePolicyOriginField(overrideRule); err != nil {
+			return err
+		}
+
 		if err := o.cueManager.Validate([]byte(overrideRule.Overriders.RenderedCue)); err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+func (o *overridePolicyInterrupter) validateOverridePolicyOriginField(overrideRule policyv1alpha1.RuleWithOperation) error {
+	for i := range overrideRule.Overriders.Origin {
+		if len(overrideRule.Overriders.Origin[i].Tolerations) > 0 {
+			errs := validateTolerations(overrideRule.Overriders.Origin[i].Tolerations)
+			if len(errs) > 0 {
+				return errs.ToAggregate()
+			}
 		}
 	}
 
@@ -317,4 +343,113 @@ func compareCallbackMap(cur, old map[string]*tokenCallbackImpl) (update, remove 
 	}
 
 	return
+}
+
+func validateOverrideRuleOrigin(overriders []policyv1alpha1.OverrideRuleOrigin) bool {
+	var rr []int
+	var ro []int
+	for i := range overriders {
+		if overriders[i].Type == policyv1alpha1.OverrideRuleOriginResourceRequirements {
+			rr = append(rr, overriders[i].ContainerCount)
+		}
+
+		if overriders[i].Type == policyv1alpha1.OverrideRuleOriginResourceOversell {
+			ro = append(ro, overriders[i].ContainerCount)
+		}
+	}
+
+	rrMap := make(map[int]bool)
+	for _, v := range rr {
+		rrMap[v] = true
+	}
+
+	for _, v := range ro {
+		if rrMap[v] {
+			return true
+		}
+	}
+
+	return false
+}
+
+func validateTolerations(tolerations []corev1.Toleration) field.ErrorList {
+	path := field.NewPath("spec", "affinity", "toleration")
+	allErrors := field.ErrorList{}
+	for i, toleration := range tolerations {
+		toleration := toleration
+		idxPath := path.Index(i)
+		// validate the toleration key
+		if len(toleration.Key) > 0 {
+			allErrors = append(allErrors, validation.ValidateLabelName(toleration.Key, idxPath.Child("key"))...)
+		}
+
+		// empty toleration key with Exists operator and empty value means match all taints
+		if len(toleration.Key) == 0 && toleration.Operator != corev1.TolerationOpExists {
+			allErrors = append(allErrors,
+				field.Invalid(idxPath.Child("operator"),
+					toleration.Operator,
+					"operator must be Exists when `key` is empty, which means \"match all values and all keys\""))
+		}
+
+		if toleration.TolerationSeconds != nil && toleration.Effect != corev1.TaintEffectNoExecute {
+			allErrors = append(allErrors,
+				field.Invalid(idxPath.Child("effect"),
+					toleration.Effect,
+					"effect must be 'NoExecute' when `tolerationSeconds` is set"))
+		}
+
+		// validate toleration operator and value
+		switch toleration.Operator {
+		// empty operator means Equal
+		case corev1.TolerationOpEqual, "":
+			if errs := validationutil.IsValidLabelValue(toleration.Value); len(errs) != 0 {
+				allErrors = append(allErrors,
+					field.Invalid(idxPath.Child("operator"),
+						toleration.Value, strings.Join(errs, ";")))
+			}
+		case corev1.TolerationOpExists:
+			if len(toleration.Value) > 0 {
+				allErrors = append(allErrors,
+					field.Invalid(idxPath.Child("operator"),
+						toleration, "value must be empty when `operator` is 'Exists'"))
+			}
+		default:
+			validValues := []string{string(corev1.TolerationOpEqual), string(corev1.TolerationOpExists)}
+			allErrors = append(allErrors,
+				field.NotSupported(idxPath.Child("operator"),
+					toleration.Operator, validValues))
+		}
+
+		// validate toleration effect, empty toleration effect means match all taint effects
+		if len(toleration.Effect) > 0 {
+			allErrors = append(allErrors, validateTaintEffect(&toleration.Effect, true, idxPath.Child("effect"))...)
+		}
+	}
+
+	return allErrors
+}
+
+// validateTaintEffect is used from validateTollerations and is a verbatim copy of the code
+func validateTaintEffect(effect *corev1.TaintEffect, allowEmpty bool, fldPath *field.Path) field.ErrorList {
+	if !allowEmpty && len(*effect) == 0 {
+		return field.ErrorList{field.Required(fldPath, "")}
+	}
+
+	allErrors := field.ErrorList{}
+	switch *effect {
+	// TODO: Replace next line with subsequent commented-out line when implement TaintEffectNoScheduleNoAdmit.
+	case corev1.TaintEffectNoSchedule, corev1.TaintEffectPreferNoSchedule, corev1.TaintEffectNoExecute:
+		// case core.TaintEffectNoSchedule, core.TaintEffectPreferNoSchedule, core.TaintEffectNoScheduleNoAdmit,
+		//     core.TaintEffectNoExecute:
+	default:
+		validValues := []string{
+			string(corev1.TaintEffectNoSchedule),
+			string(corev1.TaintEffectPreferNoSchedule),
+			string(corev1.TaintEffectNoExecute),
+			// TODO: Uncomment this block when implement TaintEffectNoScheduleNoAdmit.
+			// string(core.TaintEffectNoScheduleNoAdmit),
+		}
+		allErrors = append(allErrors, field.NotSupported(fldPath, *effect, validValues))
+	}
+	return allErrors
 }
