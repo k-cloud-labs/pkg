@@ -13,6 +13,7 @@ type ErrorType string
 const (
 	ErrorTypeUnknown        ErrorType = "unknown"
 	ErrorTypeCueExecute     ErrorType = "cue_execute_error"
+	ErrorTypeOriginExecute  ErrorType = "cue_origin_error"
 	ErrTypePrepareCueParams ErrorType = "prepare_cue_params_error"
 
 	SubSystemName = "kcloudlabs"
@@ -70,6 +71,15 @@ var (
 			Help:      "Count of error when policy engine handle policy",
 		},
 		[]string{"name", "resource_type", "error_type"},
+	)
+
+	policySuccessCount = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: SubSystemName,
+			Name:      "policy_success_count",
+			Help:      "Count of success when policy engine handle policy",
+		},
+		[]string{"name", "resource_type"},
 	)
 
 	resourceSyncErrorCount = prometheus.NewCounterVec(
@@ -130,6 +140,11 @@ func PolicyGotError(policyName string, resourceGVK schema.GroupVersionKind, erro
 	policyErrorCount.WithLabelValues(policyName,
 		fmt.Sprintf("%s/%s/%s", resourceGVK.Group, resourceGVK.Version, resourceGVK.Kind),
 		string(errorType)).Inc()
+}
+
+func PolicySuccess(policyName string, resourceGVK schema.GroupVersionKind) {
+	policySuccessCount.WithLabelValues(policyName,
+		fmt.Sprintf("%s/%s/%s", resourceGVK.Group, resourceGVK.Version, resourceGVK.Kind)).Inc()
 }
 
 func SyncResourceError(resourceGVK schema.GroupVersionKind) {

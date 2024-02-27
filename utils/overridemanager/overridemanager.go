@@ -129,6 +129,7 @@ func (o *overrideManagerImpl) applyClusterOverridePolicies(ctx context.Context, 
 			klog.ErrorS(err, "Failed to apply cluster overriders.", "clusteroverridepolicy", p.name, "resource", klog.KObj(rawObj), "operation", operation)
 			return nil, err
 		}
+		metrics.PolicySuccess(p.name, rawObj.GroupVersionKind())
 		klog.V(2).InfoS("Applied cluster overriders.", "clusteroverridepolicy", p.name, "resource", klog.KObj(rawObj), "operation", operation)
 		appliedOverrides.Add(p.name, p.overriders)
 	}
@@ -170,6 +171,7 @@ func (o *overrideManagerImpl) applyOverridePolicies(ctx context.Context, rawObj,
 				"overridepolicy", fmt.Sprintf("%s/%s", p.namespace, p.name), "resource", klog.KObj(rawObj), "operation", operation)
 			return nil, fmt.Errorf("appling policy(%v/%v) err=%v", p.namespace, p.name, err)
 		}
+		metrics.PolicySuccess(p.name, rawObj.GroupVersionKind())
 		klog.V(2).InfoS("Applied overriders", "overridepolicy", fmt.Sprintf("%s/%s", p.namespace, p.name), "resource", klog.KObj(rawObj), "operation", operation)
 		appliedOverriders.Add(p.name, p.overriders)
 	}
@@ -276,6 +278,7 @@ func (o *overrideManagerImpl) applyPolicyOverriders(ctx context.Context, rawObj,
 		traceStep(ctx, "About to get jsonPatches by origin")
 		patches, err := getJSONPatchesByOrigin(rawObj, p.overriders.Origin)
 		if err != nil {
+			metrics.PolicyGotError(policyName, rawObj.GroupVersionKind(), metrics.ErrorTypeOriginExecute)
 			return err
 		}
 		var resultPatches []overrideOption

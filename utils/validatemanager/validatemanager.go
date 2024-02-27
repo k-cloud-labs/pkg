@@ -69,6 +69,8 @@ func (m *validateManagerImpl) ApplyValidatePolicies(ctx context.Context, rawObj 
 			return nil, err
 		}
 
+		metrics.PolicySuccess(cvp.Name, rawObj.GroupVersionKind())
+
 		if !result.Valid {
 			return result, nil
 		}
