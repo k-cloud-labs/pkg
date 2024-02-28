@@ -18,8 +18,9 @@ type templateManagerImpl struct {
 }
 
 // TemplateSource sets template source content, users can set single file path, pattern for multi files or
-//  body of file content. But only can set one of three fields, if there are more than one field be set then will use
-//  the first one only.
+//
+//	body of file content. But only can set one of three fields, if there are more than one field be set then will use
+//	the first one only.
 type TemplateSource struct {
 	// example: xx/xxx/*.tmpl
 	PathPattern string

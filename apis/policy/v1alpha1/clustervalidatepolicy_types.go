@@ -152,7 +152,8 @@ type ValidateCondition struct {
 
 // ValueProcess defines operation to handle value to compare.
 // E.g. operation: '*'
-// 		operationWith: 50%  # or 0.5
+//
+//	operationWith: 50%  # or 0.5
 type ValueProcess struct {
 	// Operation defines the type of operate value, and it should work with operationWith.
 	// For example, operation is `*` and operationWith is 0.5 then in cue the value will be multiplied by 0.5.

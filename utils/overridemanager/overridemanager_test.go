@@ -2,16 +2,20 @@ package overridemanager
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
+	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	admissionv1 "k8s.io/api/admission/v1"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 
 	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
@@ -20,6 +24,7 @@ import (
 	"github.com/k-cloud-labs/pkg/test/mock"
 	"github.com/k-cloud-labs/pkg/utils"
 	"github.com/k-cloud-labs/pkg/utils/cue"
+	"github.com/k-cloud-labs/pkg/utils/origin"
 	utilhelper "github.com/k-cloud-labs/pkg/utils/util"
 )
 
@@ -491,4 +496,358 @@ patches: [
 			}
 		})
 	}
+}
+
+func Test_getJSONPatchesByOrigin(t *testing.T) {
+	withTolerationPod := &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Pod",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "example-pod",
+			Namespace: "default",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "example-container",
+					Image: "nginx:latest",
+				},
+			},
+			Tolerations: []corev1.Toleration{
+				{
+					Key:      "example-key",
+					Operator: corev1.TolerationOpEqual,
+					Value:    "example-value",
+					Effect:   corev1.TaintEffectNoSchedule,
+				},
+			},
+		},
+	}
+
+	withTolerationPodUnstructured, err := runtime.DefaultUnstructuredConverter.ToUnstructured(withTolerationPod)
+	if err != nil {
+		fmt.Printf("Error converting Pod to Unstructured: %v\n", err)
+		return
+	}
+
+	testCases := []struct {
+		name       string
+		rawObj     *unstructured.Unstructured
+		overriders []policyv1alpha1.OverrideRuleOrigin
+		expected   origin.OverrideOption
+	}{
+		{
+			name: "annotationCase",
+			rawObj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"name":      "example-pod",
+					"namespace": "default",
+				},
+				"spec": map[string]interface{}{
+					"containers": []map[string]interface{}{
+						{
+							"name":  "nginx",
+							"image": "nginx:latest",
+						},
+					},
+				},
+			},
+			},
+			overriders: []policyv1alpha1.OverrideRuleOrigin{
+				{
+					Type:        policyv1alpha1.OverrideRuleOriginTypeAnnotations,
+					Annotations: map[string]string{"annotation1": "value1"},
+					Replace:     true,
+					Operation:   policyv1alpha1.OverriderOpAdd,
+				},
+			},
+			expected: origin.OverrideOption{
+				Op:    string(policyv1alpha1.OverriderOpReplace),
+				Path:  "/metadata/annotations",
+				Value: map[string]string{"annotation1": "value1"},
+			},
+		},
+		{
+			name: "labelCase",
+			rawObj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"name":      "example-pod",
+					"namespace": "default",
+				},
+				"spec": map[string]interface{}{
+					"containers": []map[string]interface{}{
+						{
+							"name":  "nginx",
+							"image": "nginx:latest",
+						},
+					},
+				},
+			},
+			},
+			overriders: []policyv1alpha1.OverrideRuleOrigin{
+				{
+					Type:      policyv1alpha1.OverrideRuleOriginLabels,
+					Labels:    nil,
+					Replace:   true,
+					Operation: policyv1alpha1.OverriderOpAdd,
+				},
+			},
+			expected: origin.OverrideOption{
+				Op:    string(policyv1alpha1.OverriderOpReplace),
+				Path:  "/metadata/labels",
+				Value: nil,
+			},
+		},
+		{
+			name: "nodeSelectorCase",
+			rawObj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"name":      "example-pod",
+					"namespace": "default",
+				},
+				"spec": map[string]interface{}{
+					"nodeSelector": map[string]interface{}{},
+					"containers": []map[string]interface{}{
+						{
+							"name":  "nginx",
+							"image": "nginx:latest",
+						},
+					},
+				},
+			},
+			},
+			overriders: []policyv1alpha1.OverrideRuleOrigin{
+				{
+					Type:         policyv1alpha1.OverrideRuleOriginNodeSelector,
+					NodeSelector: map[string]string{"label1": "value1"},
+					Replace:      true,
+					Operation:    policyv1alpha1.OverriderOpAdd,
+				},
+			},
+			expected: origin.OverrideOption{
+				Op:    string(policyv1alpha1.OverriderOpReplace),
+				Path:  "/spec/nodeSelector",
+				Value: map[string]string{"label1": "value1"},
+			},
+		},
+		{
+			name: "hostNetworkCase",
+			rawObj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"name":      "example-pod",
+					"namespace": "default",
+				},
+				"spec": map[string]interface{}{
+					"hostNetwork": map[string]interface{}{},
+					"containers": []map[string]interface{}{
+						{
+							"name":  "nginx",
+							"image": "nginx:latest",
+						},
+					},
+				},
+			},
+			},
+			overriders: []policyv1alpha1.OverrideRuleOrigin{
+				{
+					Type:        policyv1alpha1.OverrideRuleOriginHostNetwork,
+					HostNetwork: true,
+					Replace:     true,
+					Operation:   policyv1alpha1.OverriderOpReplace,
+				},
+			},
+			expected: origin.OverrideOption{
+				Op:    string(policyv1alpha1.OverriderOpReplace),
+				Path:  "/spec/hostNetwork",
+				Value: true,
+			},
+		},
+		{
+			name: "schedulerNameCase",
+			rawObj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"name":      "example-pod",
+					"namespace": "default",
+				},
+				"spec": map[string]interface{}{
+					"schedulerName": map[string]interface{}{},
+					"containers": []map[string]interface{}{
+						{
+							"name":  "nginx",
+							"image": "nginx:latest",
+						},
+					},
+				},
+			},
+			},
+			overriders: []policyv1alpha1.OverrideRuleOrigin{
+				{
+					Type:          policyv1alpha1.OverrideRuleOriginSchedulerName,
+					SchedulerName: "fake-scheduler",
+					Replace:       true,
+					Operation:     policyv1alpha1.OverriderOpReplace,
+				},
+			},
+			expected: origin.OverrideOption{
+
+				Op:    string(policyv1alpha1.OverriderOpReplace),
+				Path:  "/spec/schedulerName",
+				Value: "fake-scheduler",
+			},
+		},
+		{
+			name: "affinityCase",
+			rawObj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"name":      "example-pod",
+					"namespace": "default",
+				},
+				"spec": map[string]interface{}{
+					"schedulerName": map[string]interface{}{},
+					"containers": []map[string]interface{}{
+						{
+							"name":  "nginx",
+							"image": "nginx:latest",
+						},
+					},
+				},
+				"affinity": map[string]interface{}{
+					"nodeAffinity": map[string]interface{}{
+						"requiredDuringSchedulingIgnoredDuringExecution": map[string]interface{}{
+							"nodeSelectorTerms": []interface{}{
+								map[string]interface{}{
+									"matchExpressions": []interface{}{
+										map[string]interface{}{
+											"key":      "key",
+											"operator": "In",
+											"values":   []interface{}{"value"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			},
+			overriders: []policyv1alpha1.OverrideRuleOrigin{
+				{
+					Type:      policyv1alpha1.OverrideRuleOriginAffinity,
+					Affinity:  nil,
+					Replace:   true,
+					Operation: policyv1alpha1.OverriderOpReplace,
+				},
+			},
+			expected: origin.OverrideOption{
+				Op:    string(policyv1alpha1.OverriderOpReplace),
+				Path:  "/spec/affinity",
+				Value: nil,
+			},
+		},
+		{
+			name:   "tolerationCase",
+			rawObj: &unstructured.Unstructured{Object: withTolerationPodUnstructured},
+			overriders: []policyv1alpha1.OverrideRuleOrigin{
+				{
+					Type:        policyv1alpha1.OverrideRuleOriginTolerations,
+					Tolerations: nil,
+					Replace:     true,
+					Operation:   policyv1alpha1.OverriderOpReplace,
+				},
+			},
+			expected: origin.OverrideOption{
+				Op:    string(policyv1alpha1.OverriderOpReplace),
+				Path:  "/spec/tolerations",
+				Value: nil,
+			},
+		},
+		{
+			name: "tscCase",
+			rawObj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"name":      "example-pod",
+					"namespace": "default",
+				},
+				"spec": map[string]interface{}{
+					"schedulerName": map[string]interface{}{},
+					"containers": []map[string]interface{}{
+						{
+							"name":  "nginx",
+							"image": "nginx:latest",
+						},
+					},
+				},
+				"topologySpreadConstraints": []interface{}{
+					map[string]interface{}{
+						"maxSkew":           1,
+						"topologyKey":       "kubernetes.io/hostname",
+						"whenUnsatisfiable": "DoNotSchedule",
+						"labelSelector": map[string]interface{}{
+							"matchLabels": map[string]interface{}{
+								"example-label": "true",
+							},
+						},
+					},
+				},
+			},
+			},
+			overriders: []policyv1alpha1.OverrideRuleOrigin{
+				{
+					Type:                      policyv1alpha1.OverrideRuleOriginTopologySpreadConstraints,
+					TopologySpreadConstraints: nil,
+					Replace:                   true,
+					Operation:                 policyv1alpha1.OverriderOpReplace,
+				},
+			},
+			expected: origin.OverrideOption{
+				Op:    string(policyv1alpha1.OverriderOpReplace),
+				Path:  "/spec/topologySpreadConstraints",
+				Value: nil,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := getJSONPatchesByOrigin(tc.rawObj, tc.overriders)
+			if err != nil {
+				t.Errorf("Expected no error, but got error: %v", err)
+			}
+
+			if !equalOverrideOptions(result[0], &tc.expected) {
+				t.Errorf("Expected %v, but got %v", tc.expected, result[0])
+			}
+		})
+	}
+}
+
+func equalOverrideOptions(a, b *origin.OverrideOption) bool {
+	if a.Op != b.Op || a.Path != b.Path {
+		return false
+	}
+
+	return deepEqualValuesIgnoringType(a.Value, b.Value)
+}
+
+func deepEqualValuesIgnoringType(value1, value2 interface{}) bool {
+	json1, _ := json.Marshal(value1)
+	json2, _ := json.Marshal(value2)
+
+	return reflect.DeepEqual(string(json1), string(json2))
 }

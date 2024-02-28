@@ -113,11 +113,15 @@ func NewClusterValidatePolicyInterrupter(interrupter PolicyInterrupter, tm token
 
 func (v *clusterValidatePolicyInterrupter) validateClusterValidatePolicy(obj *policyv1alpha1.ClusterValidatePolicy) error {
 	for _, validateRule := range obj.Spec.ValidateRules {
-		if validateRule.Template == nil && len(validateRule.RenderedCue) == 0 {
-			continue
+		if len(validateRule.RenderedCue) != 0 {
+			if err := v.cueManager.Validate([]byte(validateRule.RenderedCue)); err != nil {
+				return err
+			}
 		}
-		if err := v.cueManager.Validate([]byte(validateRule.RenderedCue)); err != nil {
-			return err
+		if len(validateRule.Cue) != 0 {
+			if err := v.cueManager.Validate([]byte(validateRule.Cue)); err != nil {
+				return err
+			}
 		}
 	}
 
