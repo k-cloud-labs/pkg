@@ -128,6 +128,17 @@ func (o *overridePolicyInterrupter) validateOverridePolicy(objSpec *policyv1alph
 		if err := o.cueManager.Validate([]byte(overrideRule.Overriders.RenderedCue)); err != nil {
 			return err
 		}
+
+		if len(overrideRule.Overriders.RenderedCue) != 0 {
+			if err := o.cueManager.Validate([]byte(overrideRule.Overriders.RenderedCue)); err != nil {
+				return err
+			}
+		}
+		if len(overrideRule.Overriders.Cue) != 0 {
+			if err := o.cueManager.Validate([]byte(overrideRule.Overriders.Cue)); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
