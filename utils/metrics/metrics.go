@@ -28,6 +28,16 @@ var (
 		},
 		[]string{"policy_type"},
 	)
+
+	policyEnable = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: SubSystemName,
+			Name:      "policy_enable",
+			Help:      "this Policy enabled in the cluster",
+		},
+		[]string{"policy_type", "name"},
+	)
+
 	overridePolicyMatchedCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Subsystem: SubSystemName,
@@ -95,6 +105,7 @@ var (
 func init() {
 	metrics.Registry.MustRegister(
 		policyTotalNumber,
+		policyEnable,
 		overridePolicyMatchedCount,
 		overridePolicyOverrideCount,
 		validatePolicyMatchedCount,
@@ -114,6 +125,14 @@ func DecPolicy(policyType string) {
 
 func SetPolicyNumber(policyType string, n int64) {
 	policyTotalNumber.WithLabelValues(policyType).Set(float64(n))
+}
+
+func IncrPolicyEnable(policyType, name string) {
+	policyEnable.WithLabelValues(policyType, name).Set(1)
+}
+
+func DecPolicyEnable(policyType, name string) {
+	policyEnable.WithLabelValues(policyType, name).Set(0)
 }
 
 func OverridePolicyMatched(policyName string, resourceGVK schema.GroupVersionKind) {
