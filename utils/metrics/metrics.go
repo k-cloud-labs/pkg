@@ -13,6 +13,7 @@ type ErrorType string
 const (
 	ErrorTypeUnknown        ErrorType = "unknown"
 	ErrorTypeCueExecute     ErrorType = "cue_execute_error"
+	ErrorTypeOriginExecute  ErrorType = "cue_origin_error"
 	ErrTypePrepareCueParams ErrorType = "prepare_cue_params_error"
 
 	SubSystemName = "kcloudlabs"
@@ -27,6 +28,16 @@ var (
 		},
 		[]string{"policy_type"},
 	)
+
+	policyEnable = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: SubSystemName,
+			Name:      "policy_enable",
+			Help:      "this Policy enabled in the cluster",
+		},
+		[]string{"policy_type", "name"},
+	)
+
 	overridePolicyMatchedCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Subsystem: SubSystemName,
@@ -72,6 +83,15 @@ var (
 		[]string{"name", "resource_type", "error_type"},
 	)
 
+	policySuccessCount = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: SubSystemName,
+			Name:      "policy_success_count",
+			Help:      "Count of success when policy engine handle policy",
+		},
+		[]string{"name", "resource_type"},
+	)
+
 	resourceSyncErrorCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Subsystem: SubSystemName,
@@ -85,6 +105,7 @@ var (
 func init() {
 	metrics.Registry.MustRegister(
 		policyTotalNumber,
+		policyEnable,
 		overridePolicyMatchedCount,
 		overridePolicyOverrideCount,
 		validatePolicyMatchedCount,
@@ -104,6 +125,14 @@ func DecPolicy(policyType string) {
 
 func SetPolicyNumber(policyType string, n int64) {
 	policyTotalNumber.WithLabelValues(policyType).Set(float64(n))
+}
+
+func IncrPolicyEnable(policyType, name string) {
+	policyEnable.WithLabelValues(policyType, name).Set(1)
+}
+
+func DecPolicyEnable(policyType, name string) {
+	policyEnable.WithLabelValues(policyType, name).Set(0)
 }
 
 func OverridePolicyMatched(policyName string, resourceGVK schema.GroupVersionKind) {
@@ -130,6 +159,11 @@ func PolicyGotError(policyName string, resourceGVK schema.GroupVersionKind, erro
 	policyErrorCount.WithLabelValues(policyName,
 		fmt.Sprintf("%s/%s/%s", resourceGVK.Group, resourceGVK.Version, resourceGVK.Kind),
 		string(errorType)).Inc()
+}
+
+func PolicySuccess(policyName string, resourceGVK schema.GroupVersionKind) {
+	policySuccessCount.WithLabelValues(policyName,
+		fmt.Sprintf("%s/%s/%s", resourceGVK.Group, resourceGVK.Version, resourceGVK.Kind)).Inc()
 }
 
 func SyncResourceError(resourceGVK schema.GroupVersionKind) {

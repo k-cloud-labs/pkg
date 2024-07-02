@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+
+	policyv1alpha1 "github.com/k-cloud-labs/pkg/apis/policy/v1alpha1"
 	"github.com/k-cloud-labs/pkg/utils/tokenmanager"
 )
 
@@ -65,6 +68,75 @@ func Test_compareCallbackMap(t *testing.T) {
 			}
 			if !reflect.DeepEqual(gotRemove, tt.wantRemove) {
 				t.Errorf("compareCallbackMap() gotRemove = %v, want %v", gotRemove, tt.wantRemove)
+			}
+		})
+	}
+}
+
+func Test_validateOverrideRuleOrigin(t *testing.T) {
+	testCases := []struct {
+		name       string
+		overriders []policyv1alpha1.OverrideRuleOrigin
+		expected   bool
+	}{
+		{
+			name: "Valid Case",
+			overriders: []policyv1alpha1.OverrideRuleOrigin{
+				{Type: policyv1alpha1.OverrideRuleOriginResourceRequirements, ContainerCount: 1},
+				{Type: policyv1alpha1.OverrideRuleOriginResourceOversell, ContainerCount: 1},
+			},
+			expected: true,
+		},
+		{
+			name: "Invalid Case",
+			overriders: []policyv1alpha1.OverrideRuleOrigin{
+				{Type: policyv1alpha1.OverrideRuleOriginResourceRequirements, ContainerCount: 1},
+				{Type: policyv1alpha1.OverrideRuleOriginResourceOversell, ContainerCount: 2},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := validateOverrideRuleOrigin(tc.overriders)
+			if result != tc.expected {
+				t.Errorf("Expected %v, but got %v", tc.expected, result)
+			}
+		})
+	}
+}
+
+func Test_validateTolerations(t *testing.T) {
+	testCases := []struct {
+		name        string
+		tolerations []corev1.Toleration
+		error       bool
+	}{
+		{
+			name: "Valid Case",
+			tolerations: []corev1.Toleration{
+				{Key: "key1", Operator: corev1.TolerationOpEqual, Value: "value1"},
+				{Key: "", Operator: corev1.TolerationOpExists},
+			},
+			error: false,
+		},
+		{
+			name: "Invalid Case",
+			tolerations: []corev1.Toleration{
+				{Key: "key1", Operator: corev1.TolerationOpEqual, Value: "!@#"},
+				{Key: "key2", Operator: corev1.TolerationOpExists, Value: "value2"},
+			},
+			error: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := validateTolerations(tc.tolerations)
+			errCount := len(result)
+			if (errCount > 0) != tc.error {
+				t.Errorf("Expected error is %v, but got %v", tc.error, result)
 			}
 		})
 	}
